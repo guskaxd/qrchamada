@@ -2,6 +2,7 @@ const express = require('express');
 const QRCode = require('qrcode');
 const ExcelJS = require('exceljs');
 const fs = require('fs');
+const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -12,6 +13,13 @@ const DOMINIO_PUBLICO = 'https://qrchamada-production.up.railway.app';
 async function registrarPresenca(nomeAluno) {
     const workbook = new ExcelJS.Workbook();
     
+    // 1. Garante que a pasta existe (cria a pasta /data se o Railway não tiver criado)
+    const diretorio = path.dirname(NOME_ARQUIVO);
+    if (!fs.existsSync(diretorio)) {
+        fs.mkdirSync(diretorio, { recursive: true });
+    }
+    
+    // 2. Lê o arquivo se ele já existir
     if (fs.existsSync(NOME_ARQUIVO)) {
         await workbook.xlsx.readFile(NOME_ARQUIVO);
     } else {
@@ -20,6 +28,7 @@ async function registrarPresenca(nomeAluno) {
 
     const worksheet = workbook.getWorksheet('Presencas');
 
+    // 3. Configura as colunas se estiver vazio
     if (worksheet.rowCount === 0) {
         worksheet.columns = [
             { header: 'Data/Hora', key: 'data', width: 25 },
@@ -28,12 +37,14 @@ async function registrarPresenca(nomeAluno) {
         ];
     }
 
+    // 4. Adiciona o aluno
     worksheet.addRow({
         data: new Date().toLocaleString('pt-BR'),
         aluno: nomeAluno,
         status: 'Presente'
     });
 
+    // 5. Salva o arquivo
     await workbook.xlsx.writeFile(NOME_ARQUIVO);
 }
 
