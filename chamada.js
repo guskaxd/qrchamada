@@ -7,7 +7,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const NOME_ARQUIVO = '/data/lista_presenca.xlsx';
 
-const DOMINIO_PUBLICO = 'qrchamada-production.up.railway.app';
+const DOMINIO_PUBLICO = 'https://qrchamada-production.up.railway.app    ';
 
 async function registrarPresenca(nomeAluno) {
     const workbook = new ExcelJS.Workbook();
@@ -74,7 +74,6 @@ app.get('/marcar/:nomeAluno', async (req, res) => {
     }
 });
 
-app.listen(PORT, '8.0.8.0', () => {
+app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Servidor rodando na porta ${PORT}`);
-    console.log(`Lembre-se de alterar a variável DOMINIO_PUBLICO para o link oficial gerado pelo Railway.`);
 });
