@@ -5,7 +5,7 @@ const fs = require('fs');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const NOME_ARQUIVO = './lista_presenca.xlsx';
+const NOME_ARQUIVO = '/data/lista_presenca.xlsx';
 
 const DOMINIO_PUBLICO = 'qrchamada-production.up.railway.app';
 
@@ -74,9 +74,7 @@ app.get('/marcar/:nomeAluno', async (req, res) => {
     }
 });
 
-app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Servidor rodando na porta ${PORT}`);
-    console.log(`1. Descubra o IP local do seu computador (ex: ipconfig no Windows ou ifconfig no Linux/Mac).`);
-    console.log(`2. Altere a variável MEU_IP no código.`);
-    console.log(`3. Acesse no navegador: http://localhost:${PORT}/gerar-qr/NomeDoAluno`);
+app.listen(PORT, '8.0.8.0', () => {
+    console.log(`🚀 Servidor rodando na porta ${PORT}`);
+    console.log(`Lembre-se de alterar a variável DOMINIO_PUBLICO para o link oficial gerado pelo Railway.`);
 });
