@@ -13,13 +13,11 @@ const DOMINIO_PUBLICO = 'https://qrchamada-production.up.railway.app';
 async function registrarPresenca(nomeAluno) {
     const workbook = new ExcelJS.Workbook();
     
-    // 1. Garante que a pasta existe (cria a pasta /data se o Railway não tiver criado)
     const diretorio = path.dirname(NOME_ARQUIVO);
     if (!fs.existsSync(diretorio)) {
         fs.mkdirSync(diretorio, { recursive: true });
     }
     
-    // 2. Lê o arquivo se ele já existir
     if (fs.existsSync(NOME_ARQUIVO)) {
         await workbook.xlsx.readFile(NOME_ARQUIVO);
     } else {
@@ -28,7 +26,6 @@ async function registrarPresenca(nomeAluno) {
 
     const worksheet = workbook.getWorksheet('Presencas');
 
-    // 3. Configura as colunas se estiver vazio
     if (worksheet.rowCount === 0) {
         worksheet.columns = [
             { header: 'Data/Hora', key: 'data', width: 25 },
@@ -37,14 +34,12 @@ async function registrarPresenca(nomeAluno) {
         ];
     }
 
-    // 4. Adiciona o aluno
     worksheet.addRow({
         data: new Date().toLocaleString('pt-BR'),
         aluno: nomeAluno,
         status: 'Presente'
     });
 
-    // 5. Salva o arquivo
     await workbook.xlsx.writeFile(NOME_ARQUIVO);
 }
 
@@ -82,6 +77,19 @@ app.get('/marcar/:nomeAluno', async (req, res) => {
     } catch (error) {
         console.error(error);
         res.status(500).send('Erro ao registrar presença no Excel.');
+    }
+});
+
+app.get('/baixar-planilha', (req, res) => {
+    if (fs.existsSync(NOME_ARQUIVO)) {
+        res.download(NOME_ARQUIVO, 'lista_presenca_ifma.xlsx');
+    } else {
+        res.status(404).send(`
+            <div style="text-align: center; margin-top: 50px; font-family: sans-serif; color: red;">
+                <h2>Arquivo não encontrado</h2>
+                <p>Ninguém marcou presença ainda, então o arquivo não foi criado!</p>
+            </div>
+        `);
     }
 });
 
