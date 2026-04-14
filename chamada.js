@@ -7,7 +7,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const NOME_ARQUIVO = './lista_presenca.xlsx';
 
-const DOMINIO_PUBLICO = 'https://seu-projeto-railway.app';
+const DOMINIO_PUBLICO = 'qrchamada-production.up.railway.app';
 
 async function registrarPresenca(nomeAluno) {
     const workbook = new ExcelJS.Workbook();
