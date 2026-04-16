@@ -13,13 +13,12 @@ const DOMINIO_PUBLICO = 'https://qrchamada-production.up.railway.app';
 
 let estaSalvando = false;
 
-// Garante que a pasta /data existe logo ao iniciar o servidor
 if (!fs.existsSync(DIRETORIO_DADOS)) {
     fs.mkdirSync(DIRETORIO_DADOS, { recursive: true });
 }
 
-// Nova função dinâmica que recebe a data e salva no arquivo correto
-async function registrarPresenca(nomeAluno, dataChamada) {
+// 1. A FUNÇÃO AGORA RECEBE A DISCIPLINA
+async function registrarPresenca(nomeAluno, dataChamada, disciplina) {
     while (estaSalvando) {
         await new Promise(resolve => setTimeout(resolve, 500));
     }
@@ -27,8 +26,11 @@ async function registrarPresenca(nomeAluno, dataChamada) {
     try {
         estaSalvando = true;
         
-        // Define o nome do arquivo com base na data (Ex: presenca_2026-04-15.xlsx)
-        const nomeArquivo = path.join(DIRETORIO_DADOS, `presenca_${dataChamada}.xlsx`);
+        // Remove espaços e caracteres especiais para não bugar o nome do arquivo no Windows/Linux
+        const discFormatada = disciplina.replace(/[^a-zA-Z0-9]/g, '_');
+        
+        // Novo padrão: presenca_Dispositivos_2026-04-15.xlsx
+        const nomeArquivo = path.join(DIRETORIO_DADOS, `presenca_${discFormatada}_${dataChamada}.xlsx`);
         const workbook = new ExcelJS.Workbook();
 
         if (fs.existsSync(nomeArquivo)) {
@@ -67,7 +69,7 @@ async function registrarPresenca(nomeAluno, dataChamada) {
         ]);
 
         await workbook.xlsx.writeFile(nomeArquivo);
-        console.log(`✅ Presença de ${nomeAluno} salva no dia ${dataChamada}.`);
+        console.log(`✅ Presença de ${nomeAluno} salva em ${disciplina} no dia ${dataChamada}.`);
 
     } catch (error) {
         throw error; 
@@ -76,11 +78,10 @@ async function registrarPresenca(nomeAluno, dataChamada) {
     }
 }
 
-// ROTA 1: PAINEL INICIAL (Agora com seletor de data e lista de planilhas)
+// ROTA 1: PAINEL INICIAL
 app.get('/', (req, res) => {
-    const hoje = new Date().toISOString().split('T')[0]; // Pega a data atual no formato YYYY-MM-DD
+    const hoje = new Date().toISOString().split('T')[0]; 
     
-    // Lê todos os arquivos XLSX que já foram criados na pasta /data
     let arquivosHtml = '';
     const arquivos = fs.readdirSync(DIRETORIO_DADOS).filter(file => file.endsWith('.xlsx'));
     
@@ -88,7 +89,9 @@ app.get('/', (req, res) => {
         arquivosHtml = '<p style="color: #666; font-size: 14px;">Nenhuma planilha criada ainda.</p>';
     } else {
         arquivos.forEach(arq => {
-            arquivosHtml += `<a href="/baixar/${arq}" class="btn-download-list">📄 ${arq}</a>`;
+            // Substitui os underscores por espaço só para ficar bonito na tela
+            const nomeExibicao = arq.replace('presenca_', '').replace('.xlsx', '').replace(/_/g, ' ');
+            arquivosHtml += `<a href="/baixar/${arq}" class="btn-download-list">📄 ${nomeExibicao}</a>`;
         });
     }
 
@@ -98,7 +101,7 @@ app.get('/', (req, res) => {
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Painel de Chamada</title>
+            <title>Painel de Chamada IFMA</title>
             <style>
                 body { font-family: sans-serif; background-color: #f4f7f6; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; padding: 20px; box-sizing: border-box; }
                 .card { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 8px 16px rgba(0,0,0,0.1); text-align: center; max-width: 450px; width: 100%; }
@@ -106,11 +109,11 @@ app.get('/', (req, res) => {
                 p { color: #666; margin-bottom: 20px; }
                 .input-group { margin-bottom: 20px; text-align: left; }
                 label { display: block; margin-bottom: 5px; font-weight: bold; color: #333; }
-                input[type="date"] { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 16px; box-sizing: border-box; }
+                input[type="date"], input[type="text"] { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 16px; box-sizing: border-box; }
                 .btn { display: block; width: 100%; color: white; padding: 15px; text-decoration: none; font-size: 16px; font-weight: bold; border-radius: 8px; margin-bottom: 30px; border: none; cursor: pointer; }
                 .btn-blue { background-color: #007bff; }
                 .btn-blue:hover { background-color: #0056b3; }
-                .history-box { background-color: #e9ecef; padding: 15px; border-radius: 8px; text-align: left; }
+                .history-box { background-color: #e9ecef; padding: 15px; border-radius: 8px; text-align: left; max-height: 300px; overflow-y: auto; }
                 .history-box h3 { margin-top: 0; font-size: 16px; border-bottom: 1px solid #ccc; padding-bottom: 10px; }
                 .btn-download-list { display: block; background-color: #28a745; color: white; text-decoration: none; padding: 10px; border-radius: 6px; margin-bottom: 10px; font-size: 14px; transition: background 0.3s; }
                 .btn-download-list:hover { background-color: #218838; }
@@ -119,9 +122,13 @@ app.get('/', (req, res) => {
         <body>
             <div class="card">
                 <h1>🎓 Chamada Digital</h1>
-                <p>Selecione a data da aula para gerar o QR Code.</p>
+                <p>Configure a aula para gerar o QR Code.</p>
                 
                 <form action="/qr-turma" method="GET">
+                    <div class="input-group">
+                        <label for="disciplina">Disciplina:</label>
+                        <input type="text" id="disciplina" name="disciplina" value="Introdução a Dispositivos" required>
+                    </div>
                     <div class="input-group">
                         <label for="data">Data da Aula:</label>
                         <input type="date" id="data" name="data" value="${hoje}" required>
@@ -139,22 +146,24 @@ app.get('/', (req, res) => {
     `);
 });
 
-// ROTA 2: GERA O QR CODE ÚNICO COM A DATA EMBUTIDA
+// ROTA 2: GERA O QR CODE (Agora passando a Disciplina na URL também)
 app.get('/qr-turma', async (req, res) => {
     try {
         const dataAula = req.query.data;
-        // Agora o QR Code carrega a data na URL!
-        const urlFormulario = `${DOMINIO_PUBLICO}/chamada?data=${dataAula}`;
+        const disciplina = req.query.disciplina;
+        
+        // Passa a data e a disciplina codificadas para não quebrar a URL
+        const urlFormulario = `${DOMINIO_PUBLICO}/chamada?data=${dataAula}&disciplina=${encodeURIComponent(disciplina)}`;
         const qrImage = await QRCode.toDataURL(urlFormulario);
         
-        // Formata a data para exibir na tela bonitinho (DD/MM/YYYY)
         const [ano, mes, dia] = dataAula.split('-');
         const dataBr = `${dia}/${mes}/${ano}`;
         
         res.send(`
             <div style="text-align: center; margin-top: 50px; font-family: sans-serif;">
                 <h2>QR Code da Turma</h2>
-                <h3 style="color: #007bff;">Aula do dia: ${dataBr}</h3>
+                <h3 style="color: #007bff; margin-bottom: 5px;">${disciplina}</h3>
+                <h4 style="color: #666; margin-top: 0;">Aula do dia: ${dataBr}</h4>
                 <p>Alunos, escaneiem este código para registrar a presença.</p>
                 <img src="${qrImage}" alt="QR Code" style="width: 400px; height: 400px;">
                 <br><br>
@@ -166,10 +175,14 @@ app.get('/qr-turma', async (req, res) => {
     }
 });
 
-// ROTA 3: FORMULÁRIO COM A TRAVA DIÁRIA
+// ROTA 3: FORMULÁRIO DO ALUNO
 app.get('/chamada', (req, res) => {
     const dataAula = req.query.data;
-    const chaveTrava = `trava_${dataAula}`; // Ex: trava_2026-04-15
+    const disciplina = req.query.disciplina;
+    const discFormatada = disciplina.replace(/[^a-zA-Z0-9]/g, '_');
+    
+    // A trava agora é combo: trava_Dispositivos_2026-04-15
+    const chaveTrava = `trava_${discFormatada}_${dataAula}`; 
 
     res.send(`
         <!DOCTYPE html>
@@ -185,14 +198,17 @@ app.get('/chamada', (req, res) => {
                 button { background-color: #28a745; color: white; border: none; padding: 15px; width: 100%; border-radius: 6px; font-size: 18px; font-weight: bold; cursor: pointer; }
                 button:hover { background-color: #218838; }
                 #bloqueio { display: none; color: #856404; background-color: #fff3cd; padding: 20px; border-radius: 8px; border: 1px solid #ffeeba; }
+                .tag-disciplina { display: inline-block; background-color: #007bff; color: white; padding: 5px 10px; border-radius: 20px; font-size: 12px; font-weight: bold; margin-bottom: 10px; }
             </style>
         </head>
         <body>
             <div class="card" id="painel-principal">
                 <h2>📝 Registrar Presença</h2>
+                <span class="tag-disciplina">${disciplina}</span>
                 <p>Digite seu nome completo ou matrícula:</p>
                 <form action="/registrar" method="POST">
                     <input type="hidden" name="dataChamada" value="${dataAula}">
+                    <input type="hidden" name="disciplina" value="${disciplina}">
                     <input type="text" name="nomeAluno" placeholder="Seu nome ou matrícula" required>
                     <button type="submit">Confirmar</button>
                 </form>
@@ -200,12 +216,11 @@ app.get('/chamada', (req, res) => {
             
             <div class="card" id="bloqueio">
                 <h2>🛑 Bloqueado</h2>
-                <p>Este aparelho já foi utilizado para registrar a presença da aula de hoje.</p>
+                <p>Este aparelho já registrou a presença para <strong>${disciplina}</strong> hoje.</p>
             </div>
 
             <script>
                 function verificarTrava() {
-                    // Agora ele procura a chave exata daquele dia
                     if (localStorage.getItem('${chaveTrava}') === 'sim' || document.cookie.includes('${chaveTrava}=sim')) {
                         document.getElementById('painel-principal').style.display = 'none';
                         document.getElementById('bloqueio').style.display = 'block';
@@ -219,28 +234,28 @@ app.get('/chamada', (req, res) => {
     `);
 });
 
-// ROTA 4: RECEBE OS DADOS E SALVA NA PLANILHA CORRETA
+// ROTA 4: RECEBE OS DADOS E SALVA
 app.post('/registrar', async (req, res) => {
     try {
         const aluno = req.body.nomeAluno.trim();
-        const dataAula = req.body.dataChamada; // Recebe a data do formulário oculto
-        const chaveTrava = `trava_${dataAula}`;
+        const dataAula = req.body.dataChamada;
+        const disciplina = req.body.disciplina;
+        
+        const discFormatada = disciplina.replace(/[^a-zA-Z0-9]/g, '_');
+        const chaveTrava = `trava_${discFormatada}_${dataAula}`;
 
-        // Verifica se o celular já tem o Cookie DAQUELE DIA
         if (req.headers.cookie && req.headers.cookie.includes(`${chaveTrava}=sim`)) {
             return res.send(`
                 <div style="text-align: center; margin-top: 50px; font-family: sans-serif; color: #856404;">
                     <h1 style="font-size: 60px; margin: 0;">🛑</h1>
                     <h2>Acesso Negado</h2>
-                    <p>Este aparelho já registrou uma presença para esta aula.</p>
+                    <p>Você já registrou presença para <strong>${disciplina}</strong> hoje.</p>
                 </div>
             `);
         }
 
-        // Passa a data para a função salvar no arquivo certo
-        await registrarPresenca(aluno, dataAula);
+        await registrarPresenca(aluno, dataAula, disciplina);
         
-        // Grava o cookie específico para esse dia (dura 10 horas)
         res.setHeader('Set-Cookie', `${chaveTrava}=sim; Max-Age=36000; Path=/`);
         
         res.send(`
@@ -250,7 +265,6 @@ app.post('/registrar', async (req, res) => {
                 <p>Obrigado, <strong>${aluno}</strong>. Você já pode fechar esta página.</p>
             </div>
             <script>
-                // Grava a trava do dia no celular do aluno
                 localStorage.setItem('${chaveTrava}', 'sim');
             </script>
         `);
@@ -271,11 +285,10 @@ app.post('/registrar', async (req, res) => {
     }
 });
 
-// ROTA 5: DOWNLOAD ESPECÍFICO (Agora recebe o nome do arquivo pela URL)
+// ROTA 5: DOWNLOAD
 app.get('/baixar/:nomeDoArquivo', (req, res) => {
     const arquivoRequisitado = req.params.nomeDoArquivo;
     
-    // Segurança: Garante que só baixe arquivos .xlsx dentro da pasta data
     if (arquivoRequisitado.endsWith('.xlsx')) {
         const caminhoCompleto = path.join(DIRETORIO_DADOS, arquivoRequisitado);
         if (fs.existsSync(caminhoCompleto)) {
