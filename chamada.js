@@ -182,14 +182,14 @@ app.get('/', (req, res) => {
         <body>
             <div class="card">
                 <div class="header">
-                    <h1>🎓 Chamada Digital</h1>
+                    <h1>Chamada Digital</h1>
                     <p>Configure a disciplina e a data para gerar o código de presença da turma.</p>
                 </div>
                 
                 <form action="/qr-turma" method="GET">
                     <div class="input-group">
                         <label for="disciplina">Disciplina</label>
-                        <input type="text" id="disciplina" name="disciplina" value="Introdução a Dispositivos" required autocomplete="off">
+                        <input type="text" id="disciplina" name="disciplina" placeholder="Ex: Web II, Informática 2..." required autocomplete="off">
                     </div>
                     
                     <div class="input-group">
@@ -198,7 +198,7 @@ app.get('/', (req, res) => {
                     </div>
                     
                     <button type="submit" class="btn">
-                        <span>📱</span> Gerar QR Code da Turma
+                        <span></span> Gerar QR Code da Turma
                     </button>
                 </form>
 
@@ -385,5 +385,5 @@ app.post('/excluir/:nomeDoArquivo', (req, res) => {
 });
 
 app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 Servidor rodando na porta ${PORT}`);
+    console.log(`Servidor rodando na porta ${PORT}`);
 });
