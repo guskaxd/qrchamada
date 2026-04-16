@@ -16,7 +16,7 @@ const DOMINIO_PUBLICO = 'https://qrchamada-production.up.railway.app';
 let estaSalvando = false;
 
 async function registrarPresenca(nomeAluno) {
-    // Se o arquivo estiver ocupado, espera 500ms e tenta de novo
+    // Fila de espera para evitar corrupção de dados
     while (estaSalvando) {
         await new Promise(resolve => setTimeout(resolve, 500));
     }
@@ -39,19 +39,24 @@ async function registrarPresenca(nomeAluno) {
 
         const worksheet = workbook.getWorksheet('Presencas');
 
+        // Se a planilha estiver vazia, adicionamos a linha de cabeçalho manualmente
         if (worksheet.rowCount === 0) {
-            worksheet.columns = [
-                { header: 'Data/Hora', key: 'data', width: 25 },
-                { header: 'Aluno/Matrícula', key: 'aluno', width: 30 },
-                { header: 'Status', key: 'status', width: 15 }
-            ];
+            worksheet.addRow(['Data/Hora', 'Aluno/Matrícula', 'Status']);
+            
+            // Opcional: Deixar o cabeçalho em negrito e ajustar a largura
+            worksheet.getRow(1).font = { bold: true };
+            worksheet.getColumn(1).width = 25;
+            worksheet.getColumn(2).width = 30;
+            worksheet.getColumn(3).width = 15;
         }
 
-        worksheet.addRow({
-            data: new Date().toLocaleString('pt-BR'),
-            aluno: nomeAluno,
-            status: 'Presente'
-        });
+        // Adicionamos os dados do aluno como um ARRAY. 
+        // Assim, o dado 1 vai para a coluna 1, o dado 2 para a coluna 2, etc.
+        worksheet.addRow([
+            new Date().toLocaleString('pt-BR'),
+            nomeAluno,
+            'Presente'
+        ]);
 
         await workbook.xlsx.writeFile(NOME_ARQUIVO);
         console.log(`✅ Presença de ${nomeAluno} salva com sucesso.`);
