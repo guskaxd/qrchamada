@@ -17,7 +17,7 @@ if (!fs.existsSync(DIRETORIO_DADOS)) {
     fs.mkdirSync(DIRETORIO_DADOS, { recursive: true });
 }
 
-// 1. A FUNÇÃO AGORA RECEBE A DISCIPLINA
+// 1. FUNÇÃO DE REGISTRO
 async function registrarPresenca(nomeAluno, dataChamada, disciplina) {
     while (estaSalvando) {
         await new Promise(resolve => setTimeout(resolve, 500));
@@ -26,10 +26,7 @@ async function registrarPresenca(nomeAluno, dataChamada, disciplina) {
     try {
         estaSalvando = true;
         
-        // Remove espaços e caracteres especiais para não bugar o nome do arquivo no Windows/Linux
         const discFormatada = disciplina.replace(/[^a-zA-Z0-9]/g, '_');
-        
-        // Novo padrão: presenca_Dispositivos_2026-04-15.xlsx
         const nomeArquivo = path.join(DIRETORIO_DADOS, `presenca_${discFormatada}_${dataChamada}.xlsx`);
         const workbook = new ExcelJS.Workbook();
 
@@ -78,14 +75,13 @@ async function registrarPresenca(nomeAluno, dataChamada, disciplina) {
     }
 }
 
-// ROTA 1: PAINEL INICIAL (Com visual moderno e elegante)
+// ROTA 1: PAINEL INICIAL (Agora com botão de exclusão)
 app.get('/', (req, res) => {
     const hoje = new Date().toISOString().split('T')[0]; 
     
     let arquivosHtml = '';
     const arquivos = fs.readdirSync(DIRETORIO_DADOS).filter(file => file.endsWith('.xlsx'));
     
-    // Inverte a ordem para mostrar os arquivos mais recentes no topo
     arquivos.reverse(); 
 
     if (arquivos.length === 0) {
@@ -98,13 +94,20 @@ app.get('/', (req, res) => {
         arquivos.forEach(arq => {
             const nomeExibicao = arq.replace('presenca_', '').replace('.xlsx', '').replace(/_/g, ' ');
             arquivosHtml += `
-                <a href="/baixar/${arq}" class="file-item">
-                    <div class="file-info">
-                        <span class="file-icon">📊</span>
-                        <span class="file-name">${nomeExibicao}</span>
-                    </div>
-                    <span class="download-icon">📥</span>
-                </a>
+                <div class="file-item-container">
+                    <a href="/baixar/${arq}" class="file-link" title="Baixar planilha">
+                        <div class="file-info">
+                            <span class="file-icon">📊</span>
+                            <span class="file-name">${nomeExibicao}</span>
+                        </div>
+                        <span class="download-icon">📥</span>
+                    </a>
+                    <form action="/excluir/${arq}" method="POST" style="margin: 0;">
+                        <button type="submit" class="btn-delete" title="Excluir planilha" onclick="return confirm('Tem certeza que deseja excluir a planilha de ${nomeExibicao}? Esta ação não pode ser desfeita.')">
+                            🗑️
+                        </button>
+                    </form>
+                </div>
             `;
         });
     }
@@ -119,36 +122,21 @@ app.get('/', (req, res) => {
             <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
             <style>
                 :root {
-                    --primary: #2ea44f; /* Verde estilo GitHub/IFMA */
+                    --primary: #2ea44f; 
                     --primary-hover: #22863a;
                     --bg-color: #f6f8fa;
                     --card-bg: #ffffff;
                     --text-dark: #24292e;
                     --text-muted: #586069;
                     --border-color: #e1e4e8;
+                    --danger: #d73a49;
+                    --danger-hover: #cb2431;
                 }
 
                 * { box-sizing: border-box; margin: 0; padding: 0; }
                 
-                body { 
-                    font-family: 'Inter', -apple-system, sans-serif; 
-                    background-color: var(--bg-color); 
-                    color: var(--text-dark);
-                    display: flex; 
-                    justify-content: center; 
-                    align-items: center; 
-                    min-height: 100vh; 
-                    padding: 20px; 
-                }
-
-                .card { 
-                    background: var(--card-bg); 
-                    padding: 40px; 
-                    border-radius: 16px; 
-                    box-shadow: 0 12px 28px rgba(0,0,0,0.05), 0 2px 4px rgba(0,0,0,0.03); 
-                    width: 100%; 
-                    max-width: 480px; 
-                }
+                body { font-family: 'Inter', -apple-system, sans-serif; background-color: var(--bg-color); color: var(--text-dark); display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 20px; }
+                .card { background: var(--card-bg); padding: 40px; border-radius: 16px; box-shadow: 0 12px 28px rgba(0,0,0,0.05), 0 2px 4px rgba(0,0,0,0.03); width: 100%; max-width: 480px; }
 
                 .header { text-align: center; margin-bottom: 30px; }
                 .header h1 { font-size: 24px; font-weight: 700; margin-bottom: 8px; color: var(--text-dark); }
@@ -156,87 +144,36 @@ app.get('/', (req, res) => {
 
                 .input-group { margin-bottom: 20px; }
                 label { display: block; margin-bottom: 8px; font-weight: 600; font-size: 14px; color: var(--text-dark); }
-                
-                input[type="text"], input[type="date"] { 
-                    width: 100%; 
-                    padding: 12px 16px; 
-                    border: 1px solid var(--border-color); 
-                    border-radius: 8px; 
-                    font-size: 15px; 
-                    font-family: 'Inter', sans-serif;
-                    transition: all 0.2s ease;
-                    background-color: #fafbfc;
-                }
-                
-                input[type="text"]:focus, input[type="date"]:focus { 
-                    outline: none; 
-                    border-color: var(--primary); 
-                    box-shadow: 0 0 0 3px rgba(46, 164, 79, 0.15); 
-                    background-color: #fff;
-                }
+                input[type="text"], input[type="date"] { width: 100%; padding: 12px 16px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 15px; font-family: 'Inter', sans-serif; transition: all 0.2s ease; background-color: #fafbfc; }
+                input[type="text"]:focus, input[type="date"]:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(46, 164, 79, 0.15); background-color: #fff; }
 
-                .btn { 
-                    display: flex; 
-                    justify-content: center;
-                    align-items: center;
-                    gap: 8px;
-                    width: 100%; 
-                    background-color: var(--primary); 
-                    color: white; 
-                    padding: 14px; 
-                    border: none;
-                    font-size: 16px; 
-                    font-weight: 600; 
-                    border-radius: 8px; 
-                    cursor: pointer;
-                    transition: background-color 0.2s, transform 0.1s; 
-                    margin-bottom: 35px;
-                }
-                
+                .btn { display: flex; justify-content: center; align-items: center; gap: 8px; width: 100%; background-color: var(--primary); color: white; padding: 14px; border: none; font-size: 16px; font-weight: 600; border-radius: 8px; cursor: pointer; transition: background-color 0.2s, transform 0.1s; margin-bottom: 35px; }
                 .btn:hover { background-color: var(--primary-hover); }
                 .btn:active { transform: scale(0.98); }
 
                 .history-section { border-top: 1px solid var(--border-color); padding-top: 25px; }
                 .history-section h3 { font-size: 16px; font-weight: 600; margin-bottom: 15px; color: var(--text-dark); display: flex; align-items: center; gap: 6px; }
                 
-                .file-list { 
-                    display: flex; 
-                    flex-direction: column; 
-                    gap: 10px; 
-                    max-height: 250px; 
-                    overflow-y: auto; 
-                    padding-right: 5px;
-                }
-                
-                /* Estilizando a barra de rolagem */
+                .file-list { display: flex; flex-direction: column; gap: 10px; max-height: 250px; overflow-y: auto; padding-right: 5px; }
                 .file-list::-webkit-scrollbar { width: 6px; }
                 .file-list::-webkit-scrollbar-track { background: transparent; }
                 .file-list::-webkit-scrollbar-thumb { background-color: #d1d5da; border-radius: 10px; }
 
-                .file-item { 
-                    display: flex; 
-                    justify-content: space-between; 
-                    align-items: center; 
-                    background-color: #fff; 
-                    border: 1px solid var(--border-color); 
-                    padding: 12px 16px; 
-                    border-radius: 8px; 
-                    text-decoration: none; 
-                    color: var(--text-dark); 
-                    transition: all 0.2s ease;
-                }
-                
-                .file-item:hover { 
-                    border-color: var(--primary); 
-                    box-shadow: 0 4px 12px rgba(0,0,0,0.05); 
-                    transform: translateY(-2px);
-                }
+                /* Novo layout do container da planilha (Link + Botão excluir) */
+                .file-item-container { display: flex; align-items: center; gap: 8px; background-color: #fff; border: 1px solid var(--border-color); border-radius: 8px; transition: all 0.2s ease; }
+                .file-item-container:hover { border-color: var(--primary); box-shadow: 0 4px 12px rgba(0,0,0,0.05); transform: translateY(-2px); }
 
+                .file-link { flex: 1; display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; text-decoration: none; color: var(--text-dark); border-radius: 8px 0 0 8px; }
                 .file-info { display: flex; align-items: center; gap: 10px; }
                 .file-icon { font-size: 18px; }
                 .file-name { font-size: 14px; font-weight: 500; }
                 .download-icon { color: var(--text-muted); font-size: 16px; transition: color 0.2s; }
-                .file-item:hover .download-icon { color: var(--primary); }
+                .file-link:hover .download-icon { color: var(--primary); }
+
+                /* Estilo do botão de excluir */
+                .btn-delete { background: none; border: none; padding: 12px 16px; cursor: pointer; border-left: 1px solid var(--border-color); font-size: 16px; transition: background-color 0.2s; border-radius: 0 8px 8px 0; }
+                .btn-delete:hover { background-color: #ffeef0; }
+                .btn-delete:active { background-color: #ffdce0; }
 
                 .empty-state { text-align: center; padding: 20px 0; color: var(--text-muted); }
                 .empty-state p { margin-top: 8px; font-size: 14px; }
@@ -252,7 +189,7 @@ app.get('/', (req, res) => {
                 <form action="/qr-turma" method="GET">
                     <div class="input-group">
                         <label for="disciplina">Disciplina</label>
-                        <input type="text" id="disciplina" name="disciplina" placeholder="Ex: Web II, Informática 2..." required autocomplete="off">
+                        <input type="text" id="disciplina" name="disciplina" value="Introdução a Dispositivos" required autocomplete="off">
                     </div>
                     
                     <div class="input-group">
@@ -277,13 +214,12 @@ app.get('/', (req, res) => {
     `);
 });
 
-// ROTA 2: GERA O QR CODE (Agora passando a Disciplina na URL também)
+// ROTA 2: GERA O QR CODE
 app.get('/qr-turma', async (req, res) => {
     try {
         const dataAula = req.query.data;
         const disciplina = req.query.disciplina;
         
-        // Passa a data e a disciplina codificadas para não quebrar a URL
         const urlFormulario = `${DOMINIO_PUBLICO}/chamada?data=${dataAula}&disciplina=${encodeURIComponent(disciplina)}`;
         const qrImage = await QRCode.toDataURL(urlFormulario);
         
@@ -311,8 +247,6 @@ app.get('/chamada', (req, res) => {
     const dataAula = req.query.data;
     const disciplina = req.query.disciplina;
     const discFormatada = disciplina.replace(/[^a-zA-Z0-9]/g, '_');
-    
-    // A trava agora é combo: trava_Dispositivos_2026-04-15
     const chaveTrava = `trava_${discFormatada}_${dataAula}`; 
 
     res.send(`
@@ -334,7 +268,7 @@ app.get('/chamada', (req, res) => {
         </head>
         <body>
             <div class="card" id="painel-principal">
-                <h2>Registrar Presença</h2>
+                <h2>📝 Registrar Presença</h2>
                 <span class="tag-disciplina">${disciplina}</span>
                 <p>Digite seu nome completo ou matrícula:</p>
                 <form action="/registrar" method="POST">
@@ -430,6 +364,24 @@ app.get('/baixar/:nomeDoArquivo', (req, res) => {
     } else {
         res.status(403).send('Acesso negado.');
     }
+});
+
+// --- ROTA 6: EXCLUIR PLANILHA (NOVA!) ---
+app.post('/excluir/:nomeDoArquivo', (req, res) => {
+    const arquivoRequisitado = req.params.nomeDoArquivo;
+
+    // Segurança: Garante que só apague planilhas na pasta correta
+    if (arquivoRequisitado.endsWith('.xlsx') && !arquivoRequisitado.includes('..')) {
+        const caminhoCompleto = path.join(DIRETORIO_DADOS, arquivoRequisitado);
+        
+        // Se o arquivo existir, ele é deletado do disco
+        if (fs.existsSync(caminhoCompleto)) {
+            fs.unlinkSync(caminhoCompleto);
+        }
+    }
+    
+    // Atualiza a página voltando para a tela inicial
+    res.redirect('/');
 });
 
 app.listen(PORT, '0.0.0.0', () => {
