@@ -131,7 +131,7 @@ app.get('/qr-turma', async (req, res) => {
     }
 });
 
-// ROTA 3: FORMULÁRIO (Com Trava de Dispositivo)
+// --- ROTA 3: FORMULÁRIO (Com Trava de Dispositivo Aprimorada) ---
 app.get('/chamada', (req, res) => {
     res.send(`
         <!DOCTYPE html>
@@ -160,31 +160,51 @@ app.get('/chamada', (req, res) => {
             </div>
             
             <div class="card" id="bloqueio">
-                <h2>⚠️ Atenção</h2>
-                <p>Este aparelho já foi utilizado para registrar uma presença hoje.</p>
+                <h2>🛑 Bloqueado</h2>
+                <p>Este aparelho já foi utilizado para registrar uma presença.</p>
             </div>
 
             <script>
-                // Checa se o aparelho já tem a marca de presença gravada
-                if (localStorage.getItem('presenca_ifma_ok') === 'sim') {
-                    document.getElementById('painel-principal').style.display = 'none';
-                    document.getElementById('bloqueio').style.display = 'block';
+                function verificarTrava() {
+                    // Checa se tem o LocalStorage OU se tem o Cookie do servidor
+                    if (localStorage.getItem('presenca_ifma_ok') === 'sim' || document.cookie.includes('aparelho_usado=sim')) {
+                        document.getElementById('painel-principal').style.display = 'none';
+                        document.getElementById('bloqueio').style.display = 'block';
+                    }
                 }
+                
+                // Roda assim que a página abre
+                verificarTrava();
+                
+                // O SEGREDO: Roda novamente mesmo se o aluno usar o botão "Voltar" do navegador
+                window.addEventListener('pageshow', verificarTrava);
             </script>
         </body>
         </html>
     `);
 });
 
-// ROTA 4: RECEBE OS DADOS E SALVA
+// --- ROTA 4: RECEBE OS DADOS E SALVA (Com Trava de Cookie) ---
 app.post('/registrar', async (req, res) => {
     try {
-        // Tira espaços extras do começo e do fim para evitar burlarem com "espaço"
+        // 1. NOVA TRAVA: Verifica se o celular já tem o Cookie (Mesmo que ele mude o nome, o celular é barrado)
+        if (req.headers.cookie && req.headers.cookie.includes('aparelho_usado=sim')) {
+            return res.send(`
+                <div style="text-align: center; margin-top: 50px; font-family: sans-serif; color: #856404;">
+                    <h1 style="font-size: 60px; margin: 0;">🛑</h1>
+                    <h2>Acesso Negado</h2>
+                    <p>Este aparelho já registrou uma presença hoje. Não é possível registrar outro aluno.</p>
+                </div>
+            `);
+        }
+
         const aluno = req.body.nomeAluno.trim(); 
         
         await registrarPresenca(aluno);
         
-        // Se deu tudo certo, responde com sucesso E ativa a trava no celular
+        // 2. GRAVA O COOKIE: Cola o adesivo no navegador do aluno válido por 10 horas (36000 segundos)
+        res.setHeader('Set-Cookie', 'aparelho_usado=sim; Max-Age=36000; Path=/');
+        
         res.send(`
             <div style="text-align: center; margin-top: 50px; font-family: sans-serif; color: green;">
                 <h1 style="font-size: 60px; margin: 0;">✅</h1>
@@ -192,19 +212,18 @@ app.post('/registrar', async (req, res) => {
                 <p>Obrigado, <strong>${aluno}</strong>. Você já pode fechar esta página.</p>
             </div>
             <script>
-                // Grava a marca no celular do aluno para ele não conseguir abrir o formulário de novo
+                // Grava a marca no celular
                 localStorage.setItem('presenca_ifma_ok', 'sim');
             </script>
         `);
     } catch (error) {
-        // Se cair aqui, é porque a trava do Servidor bloqueou
         if (error.message === 'ALUNO_DUPLICADO') {
             res.send(`
                 <div style="text-align: center; margin-top: 50px; font-family: sans-serif; color: #856404;">
                     <h1 style="font-size: 60px; margin: 0;">⚠️</h1>
                     <h2>Ops!</h2>
-                    <p>O nome/matrícula <strong>${req.body.nomeAluno}</strong> já está na lista de hoje.</p>
-                    <button onclick="history.back()" style="padding: 10px 20px; font-size: 16px; margin-top: 20px;">Voltar e corrigir</button>
+                    <p>O nome/matrícula <strong>${req.body.nomeAluno}</strong> já está na lista.</p>
+                    <button onclick="history.back()" style="padding: 10px 20px; font-size: 16px; margin-top: 20px;">Voltar</button>
                 </div>
             `);
         } else {
