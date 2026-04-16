@@ -13,38 +13,55 @@ const PORT = process.env.PORT || 3000;
 const NOME_ARQUIVO = '/data/lista_presenca.xlsx';
 const DOMINIO_PUBLICO = 'https://qrchamada-production.up.railway.app';
 
-// --- FUNÇÃO DO EXCEL (Igual à anterior) ---
+let estaSalvando = false;
+
 async function registrarPresenca(nomeAluno) {
-    const workbook = new ExcelJS.Workbook();
-    
-    const diretorio = path.dirname(NOME_ARQUIVO);
-    if (!fs.existsSync(diretorio)) {
-        fs.mkdirSync(diretorio, { recursive: true });
-    }
-    
-    if (fs.existsSync(NOME_ARQUIVO)) {
-        await workbook.xlsx.readFile(NOME_ARQUIVO);
-    } else {
-        workbook.addWorksheet('Presencas');
+    // Se o arquivo estiver ocupado, espera 500ms e tenta de novo
+    while (estaSalvando) {
+        await new Promise(resolve => setTimeout(resolve, 500));
     }
 
-    const worksheet = workbook.getWorksheet('Presencas');
+    try {
+        estaSalvando = true; // Tranca o arquivo
 
-    if (worksheet.rowCount === 0) {
-        worksheet.columns = [
-            { header: 'Data/Hora', key: 'data', width: 25 },
-            { header: 'Aluno/Matrícula', key: 'aluno', width: 30 },
-            { header: 'Status', key: 'status', width: 15 }
-        ];
+        const workbook = new ExcelJS.Workbook();
+        const diretorio = path.dirname(NOME_ARQUIVO);
+        
+        if (!fs.existsSync(diretorio)) {
+            fs.mkdirSync(diretorio, { recursive: true });
+        }
+
+        if (fs.existsSync(NOME_ARQUIVO)) {
+            await workbook.xlsx.readFile(NOME_ARQUIVO);
+        } else {
+            workbook.addWorksheet('Presencas');
+        }
+
+        const worksheet = workbook.getWorksheet('Presencas');
+
+        if (worksheet.rowCount === 0) {
+            worksheet.columns = [
+                { header: 'Data/Hora', key: 'data', width: 25 },
+                { header: 'Aluno/Matrícula', key: 'aluno', width: 30 },
+                { header: 'Status', key: 'status', width: 15 }
+            ];
+        }
+
+        worksheet.addRow({
+            data: new Date().toLocaleString('pt-BR'),
+            aluno: nomeAluno,
+            status: 'Presente'
+        });
+
+        await workbook.xlsx.writeFile(NOME_ARQUIVO);
+        console.log(`✅ Presença de ${nomeAluno} salva com sucesso.`);
+
+    } catch (error) {
+        console.error("Erro ao salvar no Excel:", error);
+        throw error;
+    } finally {
+        estaSalvando = false; // Libera o arquivo para o próximo aluno
     }
-
-    worksheet.addRow({
-        data: new Date().toLocaleString('pt-BR'),
-        aluno: nomeAluno,
-        status: 'Presente'
-    });
-
-    await workbook.xlsx.writeFile(NOME_ARQUIVO);
 }
 
 // --- ROTA 1: PAINEL INICIAL DO PROFESSOR (Atualizado) ---
