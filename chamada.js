@@ -6,7 +6,6 @@ const path = require('path');
 
 const app = express();
 
-// IMPORTANTE: Esta linha permite que o Node entenda os dados preenchidos no formulário pelo celular
 app.use(express.urlencoded({ extended: true }));
 
 const PORT = process.env.PORT || 3000;
@@ -16,13 +15,12 @@ const DOMINIO_PUBLICO = 'https://qrchamada-production.up.railway.app';
 let estaSalvando = false;
 
 async function registrarPresenca(nomeAluno) {
-    // Fila de espera para evitar corrupção de dados
     while (estaSalvando) {
         await new Promise(resolve => setTimeout(resolve, 500));
     }
 
     try {
-        estaSalvando = true; // Tranca o arquivo
+        estaSalvando = true;
 
         const workbook = new ExcelJS.Workbook();
         const diretorio = path.dirname(NOME_ARQUIVO);
@@ -39,19 +37,31 @@ async function registrarPresenca(nomeAluno) {
 
         const worksheet = workbook.getWorksheet('Presencas');
 
-        // Se a planilha estiver vazia, adicionamos a linha de cabeçalho manualmente
         if (worksheet.rowCount === 0) {
             worksheet.addRow(['Data/Hora', 'Aluno/Matrícula', 'Status']);
-            
-            // Opcional: Deixar o cabeçalho em negrito e ajustar a largura
             worksheet.getRow(1).font = { bold: true };
             worksheet.getColumn(1).width = 25;
             worksheet.getColumn(2).width = 30;
             worksheet.getColumn(3).width = 15;
         }
 
-        // Adicionamos os dados do aluno como um ARRAY. 
-        // Assim, o dado 1 vai para a coluna 1, o dado 2 para a coluna 2, etc.
+        // --- INÍCIO DA TRAVA NO SERVIDOR ---
+        let alunoJaRegistrado = false;
+        worksheet.eachRow((row, rowNumber) => {
+            if (rowNumber > 1) { // Pula a linha 1 (cabeçalho)
+                // Verifica se o texto da coluna 2 é igual ao nome digitado
+                if (row.getCell(2).value === nomeAluno) {
+                    alunoJaRegistrado = true;
+                }
+            }
+        });
+
+        if (alunoJaRegistrado) {
+            // Lança um erro específico que vamos capturar lá embaixo
+            throw new Error('ALUNO_DUPLICADO'); 
+        }
+        // --- FIM DA TRAVA NO SERVIDOR ---
+
         worksheet.addRow([
             new Date().toLocaleString('pt-BR'),
             nomeAluno,
@@ -62,14 +72,13 @@ async function registrarPresenca(nomeAluno) {
         console.log(`✅ Presença de ${nomeAluno} salva com sucesso.`);
 
     } catch (error) {
-        console.error("Erro ao salvar no Excel:", error);
-        throw error;
+        throw error; // Repassa o erro para a rota
     } finally {
-        estaSalvando = false; // Libera o arquivo para o próximo aluno
+        estaSalvando = false; 
     }
 }
 
-// --- ROTA 1: PAINEL INICIAL DO PROFESSOR (Atualizado) ---
+// ROTA 1: PAINEL INICIAL
 app.get('/', (req, res) => {
     res.send(`
         <!DOCTYPE html>
@@ -102,10 +111,9 @@ app.get('/', (req, res) => {
     `);
 });
 
-// --- ROTA 2: GERA O QR CODE ÚNICO DA TURMA ---
+// ROTA 2: GERA O QR CODE DA TURMA
 app.get('/qr-turma', async (req, res) => {
     try {
-        // O QR Code agora aponta para a rota do formulário
         const urlFormulario = `${DOMINIO_PUBLICO}/chamada`;
         const qrImage = await QRCode.toDataURL(urlFormulario);
         
@@ -123,7 +131,7 @@ app.get('/qr-turma', async (req, res) => {
     }
 });
 
-// --- ROTA 3: A PÁGINA DO FORMULÁRIO (Que abre no celular do aluno) ---
+// ROTA 3: FORMULÁRIO (Com Trava de Dispositivo)
 app.get('/chamada', (req, res) => {
     res.send(`
         <!DOCTYPE html>
@@ -138,43 +146,75 @@ app.get('/chamada', (req, res) => {
                 input { width: 100%; padding: 12px; margin: 20px 0; border: 1px solid #ccc; border-radius: 6px; font-size: 16px; box-sizing: border-box; }
                 button { background-color: #28a745; color: white; border: none; padding: 15px; width: 100%; border-radius: 6px; font-size: 18px; font-weight: bold; cursor: pointer; }
                 button:hover { background-color: #218838; }
+                #bloqueio { display: none; color: #856404; background-color: #fff3cd; padding: 20px; border-radius: 8px; border: 1px solid #ffeeba; }
             </style>
         </head>
         <body>
-            <div class="card">
+            <div class="card" id="painel-principal">
                 <h2>📝 Registrar Presença</h2>
-                <p>Digite seu nome completo ou matrícula abaixo:</p>
+                <p>Digite seu nome completo ou matrícula:</p>
                 <form action="/registrar" method="POST">
                     <input type="text" name="nomeAluno" placeholder="Seu nome ou matrícula" required>
-                    <button type="submit">Confirmar Presença</button>
+                    <button type="submit">Confirmar</button>
                 </form>
             </div>
+            
+            <div class="card" id="bloqueio">
+                <h2>⚠️ Atenção</h2>
+                <p>Este aparelho já foi utilizado para registrar uma presença hoje.</p>
+            </div>
+
+            <script>
+                // Checa se o aparelho já tem a marca de presença gravada
+                if (localStorage.getItem('presenca_ifma_ok') === 'sim') {
+                    document.getElementById('painel-principal').style.display = 'none';
+                    document.getElementById('bloqueio').style.display = 'block';
+                }
+            </script>
         </body>
         </html>
     `);
 });
 
-// --- ROTA 4: RECEBE OS DADOS DO FORMULÁRIO E SALVA (Ação oculta) ---
+// ROTA 4: RECEBE OS DADOS E SALVA
 app.post('/registrar', async (req, res) => {
     try {
-        // Pega o nome que o aluno digitou no input de name="nomeAluno"
-        const aluno = req.body.nomeAluno; 
+        // Tira espaços extras do começo e do fim para evitar burlarem com "espaço"
+        const aluno = req.body.nomeAluno.trim(); 
         
         await registrarPresenca(aluno);
         
+        // Se deu tudo certo, responde com sucesso E ativa a trava no celular
         res.send(`
             <div style="text-align: center; margin-top: 50px; font-family: sans-serif; color: green;">
                 <h1 style="font-size: 60px; margin: 0;">✅</h1>
                 <h1>Presença Confirmada!</h1>
                 <p>Obrigado, <strong>${aluno}</strong>. Você já pode fechar esta página.</p>
             </div>
+            <script>
+                // Grava a marca no celular do aluno para ele não conseguir abrir o formulário de novo
+                localStorage.setItem('presenca_ifma_ok', 'sim');
+            </script>
         `);
     } catch (error) {
-        console.error(error);
-        res.status(500).send('Erro ao registrar presença no Excel.');
+        // Se cair aqui, é porque a trava do Servidor bloqueou
+        if (error.message === 'ALUNO_DUPLICADO') {
+            res.send(`
+                <div style="text-align: center; margin-top: 50px; font-family: sans-serif; color: #856404;">
+                    <h1 style="font-size: 60px; margin: 0;">⚠️</h1>
+                    <h2>Ops!</h2>
+                    <p>O nome/matrícula <strong>${req.body.nomeAluno}</strong> já está na lista de hoje.</p>
+                    <button onclick="history.back()" style="padding: 10px 20px; font-size: 16px; margin-top: 20px;">Voltar e corrigir</button>
+                </div>
+            `);
+        } else {
+            console.error(error);
+            res.status(500).send('Erro interno ao salvar presença.');
+        }
     }
 });
 
+// ROTA 5: DOWNLOAD DA PLANILHA
 app.get('/baixar-planilha', (req, res) => {
     if (fs.existsSync(NOME_ARQUIVO)) {
         res.download(NOME_ARQUIVO, 'lista_presenca_ifma.xlsx');
