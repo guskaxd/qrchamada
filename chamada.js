@@ -5,32 +5,34 @@ const fs = require('fs');
 const path = require('path');
 
 const app = express();
-
 app.use(express.urlencoded({ extended: true }));
 
 const PORT = process.env.PORT || 3000;
-const NOME_ARQUIVO = '/data/lista_presenca.xlsx';
+const DIRETORIO_DADOS = '/data';
 const DOMINIO_PUBLICO = 'https://qrchamada-production.up.railway.app';
 
 let estaSalvando = false;
 
-async function registrarPresenca(nomeAluno) {
+// Garante que a pasta /data existe logo ao iniciar o servidor
+if (!fs.existsSync(DIRETORIO_DADOS)) {
+    fs.mkdirSync(DIRETORIO_DADOS, { recursive: true });
+}
+
+// Nova função dinâmica que recebe a data e salva no arquivo correto
+async function registrarPresenca(nomeAluno, dataChamada) {
     while (estaSalvando) {
         await new Promise(resolve => setTimeout(resolve, 500));
     }
 
     try {
         estaSalvando = true;
-
-        const workbook = new ExcelJS.Workbook();
-        const diretorio = path.dirname(NOME_ARQUIVO);
         
-        if (!fs.existsSync(diretorio)) {
-            fs.mkdirSync(diretorio, { recursive: true });
-        }
+        // Define o nome do arquivo com base na data (Ex: presenca_2026-04-15.xlsx)
+        const nomeArquivo = path.join(DIRETORIO_DADOS, `presenca_${dataChamada}.xlsx`);
+        const workbook = new ExcelJS.Workbook();
 
-        if (fs.existsSync(NOME_ARQUIVO)) {
-            await workbook.xlsx.readFile(NOME_ARQUIVO);
+        if (fs.existsSync(nomeArquivo)) {
+            await workbook.xlsx.readFile(nomeArquivo);
         } else {
             workbook.addWorksheet('Presencas');
         }
@@ -45,11 +47,9 @@ async function registrarPresenca(nomeAluno) {
             worksheet.getColumn(3).width = 15;
         }
 
-        // --- INÍCIO DA TRAVA NO SERVIDOR ---
         let alunoJaRegistrado = false;
         worksheet.eachRow((row, rowNumber) => {
-            if (rowNumber > 1) { // Pula a linha 1 (cabeçalho)
-                // Verifica se o texto da coluna 2 é igual ao nome digitado
+            if (rowNumber > 1) {
                 if (row.getCell(2).value === nomeAluno) {
                     alunoJaRegistrado = true;
                 }
@@ -57,10 +57,8 @@ async function registrarPresenca(nomeAluno) {
         });
 
         if (alunoJaRegistrado) {
-            // Lança um erro específico que vamos capturar lá embaixo
             throw new Error('ALUNO_DUPLICADO'); 
         }
-        // --- FIM DA TRAVA NO SERVIDOR ---
 
         worksheet.addRow([
             new Date().toLocaleString('pt-BR'),
@@ -68,58 +66,95 @@ async function registrarPresenca(nomeAluno) {
             'Presente'
         ]);
 
-        await workbook.xlsx.writeFile(NOME_ARQUIVO);
-        console.log(`✅ Presença de ${nomeAluno} salva com sucesso.`);
+        await workbook.xlsx.writeFile(nomeArquivo);
+        console.log(`✅ Presença de ${nomeAluno} salva no dia ${dataChamada}.`);
 
     } catch (error) {
-        throw error; // Repassa o erro para a rota
+        throw error; 
     } finally {
         estaSalvando = false; 
     }
 }
 
-// ROTA 1: PAINEL INICIAL
+// ROTA 1: PAINEL INICIAL (Agora com seletor de data e lista de planilhas)
 app.get('/', (req, res) => {
+    const hoje = new Date().toISOString().split('T')[0]; // Pega a data atual no formato YYYY-MM-DD
+    
+    // Lê todos os arquivos XLSX que já foram criados na pasta /data
+    let arquivosHtml = '';
+    const arquivos = fs.readdirSync(DIRETORIO_DADOS).filter(file => file.endsWith('.xlsx'));
+    
+    if (arquivos.length === 0) {
+        arquivosHtml = '<p style="color: #666; font-size: 14px;">Nenhuma planilha criada ainda.</p>';
+    } else {
+        arquivos.forEach(arq => {
+            arquivosHtml += `<a href="/baixar/${arq}" class="btn-download-list">📄 ${arq}</a>`;
+        });
+    }
+
     res.send(`
         <!DOCTYPE html>
         <html lang="pt-BR">
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Painel de Chamada IFMA</title>
+            <title>Painel de Chamada</title>
             <style>
-                body { font-family: sans-serif; background-color: #f4f7f6; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
-                .card { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 8px 16px rgba(0,0,0,0.1); text-align: center; max-width: 400px; width: 100%; }
-                h1 { color: #333; margin-bottom: 10px; }
-                p { color: #666; margin-bottom: 30px; }
-                .btn { display: block; width: 100%; color: white; padding: 15px; text-decoration: none; font-size: 16px; font-weight: bold; border-radius: 8px; margin-bottom: 15px; box-sizing: border-box; }
+                body { font-family: sans-serif; background-color: #f4f7f6; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; padding: 20px; box-sizing: border-box; }
+                .card { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 8px 16px rgba(0,0,0,0.1); text-align: center; max-width: 450px; width: 100%; }
+                h1 { color: #333; margin-bottom: 5px; }
+                p { color: #666; margin-bottom: 20px; }
+                .input-group { margin-bottom: 20px; text-align: left; }
+                label { display: block; margin-bottom: 5px; font-weight: bold; color: #333; }
+                input[type="date"] { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 16px; box-sizing: border-box; }
+                .btn { display: block; width: 100%; color: white; padding: 15px; text-decoration: none; font-size: 16px; font-weight: bold; border-radius: 8px; margin-bottom: 30px; border: none; cursor: pointer; }
                 .btn-blue { background-color: #007bff; }
                 .btn-blue:hover { background-color: #0056b3; }
-                .btn-green { background-color: #28a745; }
-                .btn-green:hover { background-color: #218838; }
+                .history-box { background-color: #e9ecef; padding: 15px; border-radius: 8px; text-align: left; }
+                .history-box h3 { margin-top: 0; font-size: 16px; border-bottom: 1px solid #ccc; padding-bottom: 10px; }
+                .btn-download-list { display: block; background-color: #28a745; color: white; text-decoration: none; padding: 10px; border-radius: 6px; margin-bottom: 10px; font-size: 14px; transition: background 0.3s; }
+                .btn-download-list:hover { background-color: #218838; }
             </style>
         </head>
         <body>
             <div class="card">
                 <h1>🎓 Chamada Digital</h1>
-                <p>Sistema de registro de presença.</p>
-                <a href="/qr-turma" class="btn btn-blue">📱 Mostrar QR Code da Turma</a>
-                <a href="/baixar-planilha" class="btn btn-green">📥 Baixar Planilha Excel</a>
+                <p>Selecione a data da aula para gerar o QR Code.</p>
+                
+                <form action="/qr-turma" method="GET">
+                    <div class="input-group">
+                        <label for="data">Data da Aula:</label>
+                        <input type="date" id="data" name="data" value="${hoje}" required>
+                    </div>
+                    <button type="submit" class="btn btn-blue">📱 Mostrar QR Code da Turma</button>
+                </form>
+
+                <div class="history-box">
+                    <h3>📥 Planilhas Salvas</h3>
+                    ${arquivosHtml}
+                </div>
             </div>
         </body>
         </html>
     `);
 });
 
-// ROTA 2: GERA O QR CODE DA TURMA
+// ROTA 2: GERA O QR CODE ÚNICO COM A DATA EMBUTIDA
 app.get('/qr-turma', async (req, res) => {
     try {
-        const urlFormulario = `${DOMINIO_PUBLICO}/chamada`;
+        const dataAula = req.query.data;
+        // Agora o QR Code carrega a data na URL!
+        const urlFormulario = `${DOMINIO_PUBLICO}/chamada?data=${dataAula}`;
         const qrImage = await QRCode.toDataURL(urlFormulario);
+        
+        // Formata a data para exibir na tela bonitinho (DD/MM/YYYY)
+        const [ano, mes, dia] = dataAula.split('-');
+        const dataBr = `${dia}/${mes}/${ano}`;
         
         res.send(`
             <div style="text-align: center; margin-top: 50px; font-family: sans-serif;">
                 <h2>QR Code da Turma</h2>
+                <h3 style="color: #007bff;">Aula do dia: ${dataBr}</h3>
                 <p>Alunos, escaneiem este código para registrar a presença.</p>
                 <img src="${qrImage}" alt="QR Code" style="width: 400px; height: 400px;">
                 <br><br>
@@ -131,8 +166,11 @@ app.get('/qr-turma', async (req, res) => {
     }
 });
 
-// --- ROTA 3: FORMULÁRIO (Com Trava de Dispositivo Aprimorada) ---
+// ROTA 3: FORMULÁRIO COM A TRAVA DIÁRIA
 app.get('/chamada', (req, res) => {
+    const dataAula = req.query.data;
+    const chaveTrava = `trava_${dataAula}`; // Ex: trava_2026-04-15
+
     res.send(`
         <!DOCTYPE html>
         <html lang="pt-BR">
@@ -143,7 +181,7 @@ app.get('/chamada', (req, res) => {
             <style>
                 body { font-family: sans-serif; background-color: #e9ecef; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
                 .card { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); text-align: center; width: 90%; max-width: 350px; }
-                input { width: 100%; padding: 12px; margin: 20px 0; border: 1px solid #ccc; border-radius: 6px; font-size: 16px; box-sizing: border-box; }
+                input[type="text"] { width: 100%; padding: 12px; margin: 20px 0; border: 1px solid #ccc; border-radius: 6px; font-size: 16px; box-sizing: border-box; }
                 button { background-color: #28a745; color: white; border: none; padding: 15px; width: 100%; border-radius: 6px; font-size: 18px; font-weight: bold; cursor: pointer; }
                 button:hover { background-color: #218838; }
                 #bloqueio { display: none; color: #856404; background-color: #fff3cd; padding: 20px; border-radius: 8px; border: 1px solid #ffeeba; }
@@ -154,6 +192,7 @@ app.get('/chamada', (req, res) => {
                 <h2>📝 Registrar Presença</h2>
                 <p>Digite seu nome completo ou matrícula:</p>
                 <form action="/registrar" method="POST">
+                    <input type="hidden" name="dataChamada" value="${dataAula}">
                     <input type="text" name="nomeAluno" placeholder="Seu nome ou matrícula" required>
                     <button type="submit">Confirmar</button>
                 </form>
@@ -161,22 +200,18 @@ app.get('/chamada', (req, res) => {
             
             <div class="card" id="bloqueio">
                 <h2>🛑 Bloqueado</h2>
-                <p>Este aparelho já foi utilizado para registrar uma presença.</p>
+                <p>Este aparelho já foi utilizado para registrar a presença da aula de hoje.</p>
             </div>
 
             <script>
                 function verificarTrava() {
-                    // Checa se tem o LocalStorage OU se tem o Cookie do servidor
-                    if (localStorage.getItem('presenca_ifma_ok') === 'sim' || document.cookie.includes('aparelho_usado=sim')) {
+                    // Agora ele procura a chave exata daquele dia
+                    if (localStorage.getItem('${chaveTrava}') === 'sim' || document.cookie.includes('${chaveTrava}=sim')) {
                         document.getElementById('painel-principal').style.display = 'none';
                         document.getElementById('bloqueio').style.display = 'block';
                     }
                 }
-                
-                // Roda assim que a página abre
                 verificarTrava();
-                
-                // O SEGREDO: Roda novamente mesmo se o aluno usar o botão "Voltar" do navegador
                 window.addEventListener('pageshow', verificarTrava);
             </script>
         </body>
@@ -184,26 +219,29 @@ app.get('/chamada', (req, res) => {
     `);
 });
 
-// --- ROTA 4: RECEBE OS DADOS E SALVA (Com Trava de Cookie) ---
+// ROTA 4: RECEBE OS DADOS E SALVA NA PLANILHA CORRETA
 app.post('/registrar', async (req, res) => {
     try {
-        // 1. NOVA TRAVA: Verifica se o celular já tem o Cookie (Mesmo que ele mude o nome, o celular é barrado)
-        if (req.headers.cookie && req.headers.cookie.includes('aparelho_usado=sim')) {
+        const aluno = req.body.nomeAluno.trim();
+        const dataAula = req.body.dataChamada; // Recebe a data do formulário oculto
+        const chaveTrava = `trava_${dataAula}`;
+
+        // Verifica se o celular já tem o Cookie DAQUELE DIA
+        if (req.headers.cookie && req.headers.cookie.includes(`${chaveTrava}=sim`)) {
             return res.send(`
                 <div style="text-align: center; margin-top: 50px; font-family: sans-serif; color: #856404;">
                     <h1 style="font-size: 60px; margin: 0;">🛑</h1>
                     <h2>Acesso Negado</h2>
-                    <p>Este aparelho já registrou uma presença hoje. Não é possível registrar outro aluno.</p>
+                    <p>Este aparelho já registrou uma presença para esta aula.</p>
                 </div>
             `);
         }
 
-        const aluno = req.body.nomeAluno.trim(); 
+        // Passa a data para a função salvar no arquivo certo
+        await registrarPresenca(aluno, dataAula);
         
-        await registrarPresenca(aluno);
-        
-        // 2. GRAVA O COOKIE: Cola o adesivo no navegador do aluno válido por 10 horas (36000 segundos)
-        res.setHeader('Set-Cookie', 'aparelho_usado=sim; Max-Age=36000; Path=/');
+        // Grava o cookie específico para esse dia (dura 10 horas)
+        res.setHeader('Set-Cookie', `${chaveTrava}=sim; Max-Age=36000; Path=/`);
         
         res.send(`
             <div style="text-align: center; margin-top: 50px; font-family: sans-serif; color: green;">
@@ -212,8 +250,8 @@ app.post('/registrar', async (req, res) => {
                 <p>Obrigado, <strong>${aluno}</strong>. Você já pode fechar esta página.</p>
             </div>
             <script>
-                // Grava a marca no celular
-                localStorage.setItem('presenca_ifma_ok', 'sim');
+                // Grava a trava do dia no celular do aluno
+                localStorage.setItem('${chaveTrava}', 'sim');
             </script>
         `);
     } catch (error) {
@@ -233,19 +271,20 @@ app.post('/registrar', async (req, res) => {
     }
 });
 
-// ROTA 5: DOWNLOAD DA PLANILHA
-app.get('/baixar-planilha', (req, res) => {
-    if (fs.existsSync(NOME_ARQUIVO)) {
-        res.download(NOME_ARQUIVO, 'lista_presenca_ifma.xlsx');
+// ROTA 5: DOWNLOAD ESPECÍFICO (Agora recebe o nome do arquivo pela URL)
+app.get('/baixar/:nomeDoArquivo', (req, res) => {
+    const arquivoRequisitado = req.params.nomeDoArquivo;
+    
+    // Segurança: Garante que só baixe arquivos .xlsx dentro da pasta data
+    if (arquivoRequisitado.endsWith('.xlsx')) {
+        const caminhoCompleto = path.join(DIRETORIO_DADOS, arquivoRequisitado);
+        if (fs.existsSync(caminhoCompleto)) {
+            res.download(caminhoCompleto);
+        } else {
+            res.status(404).send('Arquivo não encontrado.');
+        }
     } else {
-        res.status(404).send(`
-            <div style="text-align: center; margin-top: 50px; font-family: sans-serif; color: red;">
-                <h2>Arquivo não encontrado</h2>
-                <p>Nenhum aluno registrou presença ainda hoje!</p>
-                <br>
-                <a href="/" style="text-decoration: none; color: #007bff; font-weight: bold;">⬅ Voltar ao Painel</a>
-            </div>
-        `);
+        res.status(403).send('Acesso negado.');
     }
 });
 
