@@ -78,20 +78,34 @@ async function registrarPresenca(nomeAluno, dataChamada, disciplina) {
     }
 }
 
-// ROTA 1: PAINEL INICIAL
+// ROTA 1: PAINEL INICIAL (Com visual moderno e elegante)
 app.get('/', (req, res) => {
     const hoje = new Date().toISOString().split('T')[0]; 
     
     let arquivosHtml = '';
     const arquivos = fs.readdirSync(DIRETORIO_DADOS).filter(file => file.endsWith('.xlsx'));
     
+    // Inverte a ordem para mostrar os arquivos mais recentes no topo
+    arquivos.reverse(); 
+
     if (arquivos.length === 0) {
-        arquivosHtml = '<p style="color: #666; font-size: 14px;">Nenhuma planilha criada ainda.</p>';
+        arquivosHtml = `
+            <div class="empty-state">
+                <span style="font-size: 24px;">📭</span>
+                <p>Nenhuma planilha criada ainda.</p>
+            </div>`;
     } else {
         arquivos.forEach(arq => {
-            // Substitui os underscores por espaço só para ficar bonito na tela
             const nomeExibicao = arq.replace('presenca_', '').replace('.xlsx', '').replace(/_/g, ' ');
-            arquivosHtml += `<a href="/baixar/${arq}" class="btn-download-list">📄 ${nomeExibicao}</a>`;
+            arquivosHtml += `
+                <a href="/baixar/${arq}" class="file-item">
+                    <div class="file-info">
+                        <span class="file-icon">📊</span>
+                        <span class="file-name">${nomeExibicao}</span>
+                    </div>
+                    <span class="download-icon">📥</span>
+                </a>
+            `;
         });
     }
 
@@ -101,44 +115,161 @@ app.get('/', (req, res) => {
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Painel de Chamada IFMA</title>
+            <title>Chamada Digital - IFMA</title>
+            <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
             <style>
-                body { font-family: sans-serif; background-color: #f4f7f6; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; padding: 20px; box-sizing: border-box; }
-                .card { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 8px 16px rgba(0,0,0,0.1); text-align: center; max-width: 450px; width: 100%; }
-                h1 { color: #333; margin-bottom: 5px; }
-                p { color: #666; margin-bottom: 20px; }
-                .input-group { margin-bottom: 20px; text-align: left; }
-                label { display: block; margin-bottom: 5px; font-weight: bold; color: #333; }
-                input[type="date"], input[type="text"] { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 16px; box-sizing: border-box; }
-                .btn { display: block; width: 100%; color: white; padding: 15px; text-decoration: none; font-size: 16px; font-weight: bold; border-radius: 8px; margin-bottom: 30px; border: none; cursor: pointer; }
-                .btn-blue { background-color: #007bff; }
-                .btn-blue:hover { background-color: #0056b3; }
-                .history-box { background-color: #e9ecef; padding: 15px; border-radius: 8px; text-align: left; max-height: 300px; overflow-y: auto; }
-                .history-box h3 { margin-top: 0; font-size: 16px; border-bottom: 1px solid #ccc; padding-bottom: 10px; }
-                .btn-download-list { display: block; background-color: #28a745; color: white; text-decoration: none; padding: 10px; border-radius: 6px; margin-bottom: 10px; font-size: 14px; transition: background 0.3s; }
-                .btn-download-list:hover { background-color: #218838; }
+                :root {
+                    --primary: #2ea44f; /* Verde estilo GitHub/IFMA */
+                    --primary-hover: #22863a;
+                    --bg-color: #f6f8fa;
+                    --card-bg: #ffffff;
+                    --text-dark: #24292e;
+                    --text-muted: #586069;
+                    --border-color: #e1e4e8;
+                }
+
+                * { box-sizing: border-box; margin: 0; padding: 0; }
+                
+                body { 
+                    font-family: 'Inter', -apple-system, sans-serif; 
+                    background-color: var(--bg-color); 
+                    color: var(--text-dark);
+                    display: flex; 
+                    justify-content: center; 
+                    align-items: center; 
+                    min-height: 100vh; 
+                    padding: 20px; 
+                }
+
+                .card { 
+                    background: var(--card-bg); 
+                    padding: 40px; 
+                    border-radius: 16px; 
+                    box-shadow: 0 12px 28px rgba(0,0,0,0.05), 0 2px 4px rgba(0,0,0,0.03); 
+                    width: 100%; 
+                    max-width: 480px; 
+                }
+
+                .header { text-align: center; margin-bottom: 30px; }
+                .header h1 { font-size: 24px; font-weight: 700; margin-bottom: 8px; color: var(--text-dark); }
+                .header p { color: var(--text-muted); font-size: 15px; line-height: 1.5; }
+
+                .input-group { margin-bottom: 20px; }
+                label { display: block; margin-bottom: 8px; font-weight: 600; font-size: 14px; color: var(--text-dark); }
+                
+                input[type="text"], input[type="date"] { 
+                    width: 100%; 
+                    padding: 12px 16px; 
+                    border: 1px solid var(--border-color); 
+                    border-radius: 8px; 
+                    font-size: 15px; 
+                    font-family: 'Inter', sans-serif;
+                    transition: all 0.2s ease;
+                    background-color: #fafbfc;
+                }
+                
+                input[type="text"]:focus, input[type="date"]:focus { 
+                    outline: none; 
+                    border-color: var(--primary); 
+                    box-shadow: 0 0 0 3px rgba(46, 164, 79, 0.15); 
+                    background-color: #fff;
+                }
+
+                .btn { 
+                    display: flex; 
+                    justify-content: center;
+                    align-items: center;
+                    gap: 8px;
+                    width: 100%; 
+                    background-color: var(--primary); 
+                    color: white; 
+                    padding: 14px; 
+                    border: none;
+                    font-size: 16px; 
+                    font-weight: 600; 
+                    border-radius: 8px; 
+                    cursor: pointer;
+                    transition: background-color 0.2s, transform 0.1s; 
+                    margin-bottom: 35px;
+                }
+                
+                .btn:hover { background-color: var(--primary-hover); }
+                .btn:active { transform: scale(0.98); }
+
+                .history-section { border-top: 1px solid var(--border-color); padding-top: 25px; }
+                .history-section h3 { font-size: 16px; font-weight: 600; margin-bottom: 15px; color: var(--text-dark); display: flex; align-items: center; gap: 6px; }
+                
+                .file-list { 
+                    display: flex; 
+                    flex-direction: column; 
+                    gap: 10px; 
+                    max-height: 250px; 
+                    overflow-y: auto; 
+                    padding-right: 5px;
+                }
+                
+                /* Estilizando a barra de rolagem */
+                .file-list::-webkit-scrollbar { width: 6px; }
+                .file-list::-webkit-scrollbar-track { background: transparent; }
+                .file-list::-webkit-scrollbar-thumb { background-color: #d1d5da; border-radius: 10px; }
+
+                .file-item { 
+                    display: flex; 
+                    justify-content: space-between; 
+                    align-items: center; 
+                    background-color: #fff; 
+                    border: 1px solid var(--border-color); 
+                    padding: 12px 16px; 
+                    border-radius: 8px; 
+                    text-decoration: none; 
+                    color: var(--text-dark); 
+                    transition: all 0.2s ease;
+                }
+                
+                .file-item:hover { 
+                    border-color: var(--primary); 
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.05); 
+                    transform: translateY(-2px);
+                }
+
+                .file-info { display: flex; align-items: center; gap: 10px; }
+                .file-icon { font-size: 18px; }
+                .file-name { font-size: 14px; font-weight: 500; }
+                .download-icon { color: var(--text-muted); font-size: 16px; transition: color 0.2s; }
+                .file-item:hover .download-icon { color: var(--primary); }
+
+                .empty-state { text-align: center; padding: 20px 0; color: var(--text-muted); }
+                .empty-state p { margin-top: 8px; font-size: 14px; }
             </style>
         </head>
         <body>
             <div class="card">
-                <h1>🎓 Chamada Digital</h1>
-                <p>Configure a aula para gerar o QR Code.</p>
+                <div class="header">
+                    <h1>🎓 Chamada Digital</h1>
+                    <p>Configure a disciplina e a data para gerar o código de presença da turma.</p>
+                </div>
                 
                 <form action="/qr-turma" method="GET">
                     <div class="input-group">
-                        <label for="disciplina">Disciplina:</label>
-                        <input type="text" id="disciplina" name="disciplina" value="Introdução a Dispositivos" required>
+                        <label for="disciplina">Disciplina</label>
+                        <input type="text" id="disciplina" name="disciplina" placeholder="Ex: Web II, Informática 2..." required autocomplete="off">
                     </div>
+                    
                     <div class="input-group">
-                        <label for="data">Data da Aula:</label>
+                        <label for="data">Data da Aula</label>
                         <input type="date" id="data" name="data" value="${hoje}" required>
                     </div>
-                    <button type="submit" class="btn btn-blue">📱 Mostrar QR Code da Turma</button>
+                    
+                    <button type="submit" class="btn">
+                        <span>📱</span> Gerar QR Code da Turma
+                    </button>
                 </form>
 
-                <div class="history-box">
+                <div class="history-section">
                     <h3>📥 Planilhas Salvas</h3>
-                    ${arquivosHtml}
+                    <div class="file-list">
+                        ${arquivosHtml}
+                    </div>
                 </div>
             </div>
         </body>
@@ -203,7 +334,7 @@ app.get('/chamada', (req, res) => {
         </head>
         <body>
             <div class="card" id="painel-principal">
-                <h2>📝 Registrar Presença</h2>
+                <h2>Registrar Presença</h2>
                 <span class="tag-disciplina">${disciplina}</span>
                 <p>Digite seu nome completo ou matrícula:</p>
                 <form action="/registrar" method="POST">
