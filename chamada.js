@@ -3,8 +3,9 @@ const QRCode = require('qrcode');
 const ExcelJS = require('exceljs');
 const fs = require('fs');
 const path = require('path');
-
 const app = express();
+
+app.use(express.static('public'));
 app.use(express.urlencoded({ extended: true }));
 
 const PORT = process.env.PORT || 3000;
@@ -75,7 +76,7 @@ async function registrarPresenca(nomeAluno, dataChamada, disciplina) {
     }
 }
 
-// ROTA 1: PAINEL INICIAL (Agora com botão de exclusão)
+// ROTA 1: PAINEL INICIAL (Agora com botão de exclusão e Logo)
 app.get('/', (req, res) => {
     const hoje = new Date().toISOString().split('T')[0]; 
     
@@ -139,6 +140,10 @@ app.get('/', (req, res) => {
                 .card { background: var(--card-bg); padding: 40px; border-radius: 16px; box-shadow: 0 12px 28px rgba(0,0,0,0.05), 0 2px 4px rgba(0,0,0,0.03); width: 100%; max-width: 480px; }
 
                 .header { text-align: center; margin-bottom: 30px; }
+                
+                /* NOVO: Estilo para a logo do IFMA */
+                .logo-ifma { width: 100px; height: auto; margin-bottom: 15px; }
+                
                 .header h1 { font-size: 24px; font-weight: 700; margin-bottom: 8px; color: var(--text-dark); }
                 .header p { color: var(--text-muted); font-size: 15px; line-height: 1.5; }
 
@@ -159,7 +164,6 @@ app.get('/', (req, res) => {
                 .file-list::-webkit-scrollbar-track { background: transparent; }
                 .file-list::-webkit-scrollbar-thumb { background-color: #d1d5da; border-radius: 10px; }
 
-                /* Novo layout do container da planilha (Link + Botão excluir) */
                 .file-item-container { display: flex; align-items: center; gap: 8px; background-color: #fff; border: 1px solid var(--border-color); border-radius: 8px; transition: all 0.2s ease; }
                 .file-item-container:hover { border-color: var(--primary); box-shadow: 0 4px 12px rgba(0,0,0,0.05); transform: translateY(-2px); }
 
@@ -170,7 +174,6 @@ app.get('/', (req, res) => {
                 .download-icon { color: var(--text-muted); font-size: 16px; transition: color 0.2s; }
                 .file-link:hover .download-icon { color: var(--primary); }
 
-                /* Estilo do botão de excluir */
                 .btn-delete { background: none; border: none; padding: 12px 16px; cursor: pointer; border-left: 1px solid var(--border-color); font-size: 16px; transition: background-color 0.2s; border-radius: 0 8px 8px 0; }
                 .btn-delete:hover { background-color: #ffeef0; }
                 .btn-delete:active { background-color: #ffdce0; }
@@ -182,6 +185,8 @@ app.get('/', (req, res) => {
         <body>
             <div class="card">
                 <div class="header">
+                    <img src="/logo-ifma.png" alt="Logo IFMA" class="logo-ifma">
+                    
                     <h1>Chamada Digital</h1>
                     <p>Configure a disciplina e a data para gerar o código de presença da turma.</p>
                 </div>
@@ -198,7 +203,7 @@ app.get('/', (req, res) => {
                     </div>
                     
                     <button type="submit" class="btn">
-                        <span></span> Gerar QR Code da Turma
+                        <span>📱</span> Gerar QR Code da Turma
                     </button>
                 </form>
 
@@ -387,3 +392,4 @@ app.post('/excluir/:nomeDoArquivo', (req, res) => {
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`Servidor rodando na porta ${PORT}`);
 });
+
