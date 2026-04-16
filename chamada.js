@@ -153,67 +153,19 @@ app.post('/registrar', async (req, res) => {
     }
 });
 
-app.get('/', (req, res) => {
-    res.send(`
-        <!DOCTYPE html>
-        <html lang="pt-BR">
-        <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Painel de Chamada IFMA</title>
-            <style>
-                body {
-                    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-                    background-color: #f4f7f6;
-                    display: flex;
-                    justify-content: center;
-                    align-items: center;
-                    height: 100vh;
-                    margin: 0;
-                }
-                .card {
-                    background: white;
-                    padding: 40px;
-                    border-radius: 12px;
-                    box-shadow: 0 8px 16px rgba(0,0,0,0.1);
-                    text-align: center;
-                    max-width: 400px;
-                    width: 100%;
-                }
-                h1 {
-                    color: #333;
-                    margin-bottom: 10px;
-                }
-                p {
-                    color: #666;
-                    margin-bottom: 30px;
-                }
-                .btn {
-                    display: inline-block;
-                    background-color: #28a745;
-                    color: white;
-                    padding: 15px 25px;
-                    text-decoration: none;
-                    font-size: 18px;
-                    font-weight: bold;
-                    border-radius: 8px;
-                    transition: background-color 0.3s, transform 0.2s;
-                }
-                .btn:hover {
-                    background-color: #218838;
-                    transform: scale(1.05);
-                }
-            </style>
-        </head>
-        <body>
-            <div class="card">
-                <h1>🎓 Chamada Digital</h1>
-                <p>Sistema de registro de presença via QR Code.</p>
-                <a href="/baixar-planilha" class="btn">📥 Baixar Planilha Excel</a>
+app.get('/baixar-planilha', (req, res) => {
+    if (fs.existsSync(NOME_ARQUIVO)) {
+        res.download(NOME_ARQUIVO, 'lista_presenca_ifma.xlsx');
+    } else {
+        res.status(404).send(`
+            <div style="text-align: center; margin-top: 50px; font-family: sans-serif; color: red;">
+                <h2>Arquivo não encontrado</h2>
+                <p>Nenhum aluno registrou presença ainda hoje!</p>
+                <br>
+                <a href="/" style="text-decoration: none; color: #007bff; font-weight: bold;">⬅ Voltar ao Painel</a>
             </div>
-        </body>
-        </html>
-    `);
+        `);
+    }
 });
 
 app.listen(PORT, '0.0.0.0', () => {
