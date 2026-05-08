@@ -18,7 +18,6 @@ if (!fs.existsSync(DIRETORIO_DADOS)) {
     fs.mkdirSync(DIRETORIO_DADOS, { recursive: true });
 }
 
-// 1. FUNÇÃO DE REGISTRO
 async function registrarPresenca(nomeAluno, dataChamada, disciplina) {
     while (estaSalvando) {
         await new Promise(resolve => setTimeout(resolve, 500));
@@ -76,7 +75,6 @@ async function registrarPresenca(nomeAluno, dataChamada, disciplina) {
     }
 }
 
-// ROTA 1: PAINEL INICIAL (Agora com botão de exclusão e Logo)
 app.get('/', (req, res) => {
     const hoje = new Date().toISOString().split('T')[0]; 
     
@@ -219,7 +217,6 @@ app.get('/', (req, res) => {
     `);
 });
 
-// ROTA 2: GERA O QR CODE
 app.get('/qr-turma', async (req, res) => {
     try {
         const dataAula = req.query.data;
@@ -247,7 +244,6 @@ app.get('/qr-turma', async (req, res) => {
     }
 });
 
-// ROTA 3: FORMULÁRIO DO ALUNO
 app.get('/chamada', (req, res) => {
     const dataAula = req.query.data;
     const disciplina = req.query.disciplina;
@@ -304,7 +300,6 @@ app.get('/chamada', (req, res) => {
     `);
 });
 
-// ROTA 4: RECEBE OS DADOS E SALVA
 app.post('/registrar', async (req, res) => {
     try {
         const aluno = req.body.nomeAluno.trim();
@@ -344,7 +339,7 @@ app.post('/registrar', async (req, res) => {
                 <div style="text-align: center; margin-top: 50px; font-family: sans-serif; color: #856404;">
                     <h1 style="font-size: 60px; margin: 0;">⚠️</h1>
                     <h2>Ops!</h2>
-                    <p>O nome/matrícula <strong>${req.body.nomeAluno}</strong> já está na lista.</p>
+                    <p>O nome <strong>${req.body.nomeAluno}</strong> já está na lista.</p>
                     <button onclick="history.back()" style="padding: 10px 20px; font-size: 16px; margin-top: 20px;">Voltar</button>
                 </div>
             `);
@@ -355,7 +350,6 @@ app.post('/registrar', async (req, res) => {
     }
 });
 
-// ROTA 5: DOWNLOAD
 app.get('/baixar/:nomeDoArquivo', (req, res) => {
     const arquivoRequisitado = req.params.nomeDoArquivo;
     
@@ -371,21 +365,16 @@ app.get('/baixar/:nomeDoArquivo', (req, res) => {
     }
 });
 
-// --- ROTA 6: EXCLUIR PLANILHA (NOVA!) ---
 app.post('/excluir/:nomeDoArquivo', (req, res) => {
     const arquivoRequisitado = req.params.nomeDoArquivo;
 
-    // Segurança: Garante que só apague planilhas na pasta correta
     if (arquivoRequisitado.endsWith('.xlsx') && !arquivoRequisitado.includes('..')) {
         const caminhoCompleto = path.join(DIRETORIO_DADOS, arquivoRequisitado);
         
-        // Se o arquivo existir, ele é deletado do disco
         if (fs.existsSync(caminhoCompleto)) {
             fs.unlinkSync(caminhoCompleto);
         }
     }
-    
-    // Atualiza a página voltando para a tela inicial
     res.redirect('/');
 });
 
