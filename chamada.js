@@ -28,7 +28,7 @@ function salvarTurmas(turmas) {
     fs.writeFileSync(ARQUIVO_TURMAS, JSON.stringify(turmas, null, 2));
 }
 
-// 1. FUNÇÃO DE REGISTRO
+// 1. FUNÇÃO DE REGISTRO VIA QR CODE
 async function registrarPresenca(nomeAluno, dataChamada, disciplina) {
     while (estaSalvando) {
         await new Promise(resolve => setTimeout(resolve, 500));
@@ -67,7 +67,7 @@ async function registrarPresenca(nomeAluno, dataChamada, disciplina) {
                     if (row.getCell(3).value === 'Presente') {
                         jaRegistrado = true;
                     } else {
-                        row.getCell(1).value = new Date().toLocaleString('pt-BR').split(' ')[1]; // Salva só a hora
+                        row.getCell(1).value = new Date().toLocaleString('pt-BR').split(' ')[1]; 
                         row.getCell(3).value = 'Presente';
                     }
                 }
@@ -124,7 +124,6 @@ app.get('/', (req, res) => {
     } else {
         arquivos.forEach(arq => {
             const nomeExibicao = arq.replace('presenca_', '').replace('.xlsx', '').replace(/_/g, ' ');
-            // O botão principal agora leva para a visualização na web (/ver)
             arquivosHtml += `
                 <div class="file-item-container">
                     <a href="/ver/${arq}" class="file-link" title="Ver presença na web">
@@ -185,7 +184,7 @@ app.get('/', (req, res) => {
         <body>
             <div class="card">
                 <div class="header">
-                    <img src="/logo-ifma.png" alt="Logo IFMA" class="logo-ifma" onerror="this.style.display='none'">
+                    <img src="/ifma.png" alt="Logo IFMA" class="logo-ifma" onerror="this.style.display='none'">
                     <h1>Chamada Digital</h1>
                     <p style="font-size: 14px; margin-top: 5px;">Sistema de presenças do professor</p>
                 </div>
@@ -224,7 +223,7 @@ app.get('/', (req, res) => {
     `);
 });
 
-// NOVA ROTA: VISUALIZAÇÃO NA WEB DA CHAMADA
+// ROTA 2: VISUALIZAÇÃO E EDIÇÃO NA WEB DA CHAMADA
 app.get('/ver/:nomeDoArquivo', async (req, res) => {
     try {
         const arquivoRequisitado = req.params.nomeDoArquivo;
@@ -244,32 +243,40 @@ app.get('/ver/:nomeDoArquivo', async (req, res) => {
         let qtdFaltas = 0;
 
         worksheet.eachRow((row, rowNumber) => {
-            if (rowNumber > 1) { // Pula o cabeçalho
+            if (rowNumber > 1) { 
                 totalAlunos++;
                 const hora = row.getCell(1).value || '-';
                 const nome = row.getCell(2).value || '';
                 const status = row.getCell(3).value || 'Falta';
 
-                let badge = '';
                 if (status === 'Presente') {
                     qtdPresentes++;
-                    badge = `<span class="badge badge-presente">Presente</span>`;
                 } else {
                     qtdFaltas++;
-                    badge = `<span class="badge badge-falta">Falta</span>`;
                 }
+
+                // Transformamos a "badge" estática em um formulário interativo (dropdown)
+                const statusForm = `
+                    <form action="/atualizar-status" method="POST" style="margin: 0;">
+                        <input type="hidden" name="arquivo" value="${arquivoRequisitado}">
+                        <input type="hidden" name="aluno" value="${nome}">
+                        <select name="status" onchange="this.form.submit()" class="select-status ${status === 'Presente' ? 'select-presente' : 'select-falta'}">
+                            <option value="Presente" ${status === 'Presente' ? 'selected' : ''}>Presente</option>
+                            <option value="Falta" ${status === 'Falta' ? 'selected' : ''}>Falta</option>
+                        </select>
+                    </form>
+                `;
 
                 linhasHtml += `
                     <tr>
                         <td>${nome}</td>
-                        <td>${badge}</td>
+                        <td>${statusForm}</td>
                         <td style="color: #666; font-size: 13px;">${hora}</td>
                     </tr>
                 `;
             }
         });
 
-        // Formata o título
         const nomeExibicao = arquivoRequisitado.replace('presenca_', '').replace('.xlsx', '').replace(/_/g, ' ');
 
         res.send(`
@@ -300,9 +307,10 @@ app.get('/ver/:nomeDoArquivo', async (req, res) => {
                     td { font-size: 15px; font-weight: 500; }
                     tr:hover { background-color: #fafdff; }
                     
-                    .badge { padding: 5px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; }
-                    .badge-presente { background-color: #dcffe4; color: #1a7f37; border: 1px solid #a3ebba; }
-                    .badge-falta { background-color: #ffeef0; color: #d73a49; border: 1px solid #ffdce0; }
+                    /* CSS para o dropdown interativo */
+                    .select-status { padding: 6px 10px; border-radius: 20px; font-size: 13px; font-weight: 600; cursor: pointer; outline: none; text-align: center; font-family: 'Inter', sans-serif;}
+                    .select-presente { background-color: #dcffe4; color: #1a7f37; border: 1px solid #a3ebba; }
+                    .select-falta { background-color: #ffeef0; color: #d73a49; border: 1px solid #ffdce0; }
                     
                     .actions { display: flex; justify-content: space-between; gap: 15px; }
                     .btn { flex: 1; text-align: center; text-decoration: none; padding: 12px; border-radius: 8px; font-weight: 600; font-size: 15px; transition: 0.2s; }
@@ -332,6 +340,8 @@ app.get('/ver/:nomeDoArquivo', async (req, res) => {
                             <p>Faltas</p>
                         </div>
                     </div>
+                    
+                    <p style="font-size: 13px; color: #666; margin-bottom: 10px;">💡 Dica: Clique no status de um aluno para alterar manualmente.</p>
 
                     <table>
                         <thead>
@@ -360,8 +370,51 @@ app.get('/ver/:nomeDoArquivo', async (req, res) => {
     }
 });
 
+// NOVA ROTA: RECEBE A ALTERAÇÃO MANUAL DO PROFESSOR E SALVA NO EXCEL
+app.post('/atualizar-status', async (req, res) => {
+    try {
+        const { arquivo, aluno, status } = req.body;
+        const caminhoCompleto = path.join(DIRETORIO_DADOS, arquivo);
 
-// ROTA: PÁGINA PARA GERENCIAR TURMAS
+        // Fila de segurança
+        while (estaSalvando) {
+            await new Promise(resolve => setTimeout(resolve, 500));
+        }
+        estaSalvando = true;
+
+        if (fs.existsSync(caminhoCompleto)) {
+            const workbook = new ExcelJS.Workbook();
+            await workbook.xlsx.readFile(caminhoCompleto);
+            const worksheet = workbook.getWorksheet('Presencas');
+
+            worksheet.eachRow((row, rowNumber) => {
+                if (rowNumber > 1 && row.getCell(2).value === aluno) {
+                    row.getCell(3).value = status; // Atualiza Presente ou Falta
+                    
+                    // Se mudou pra presente, coloca a hora atual. Se mudou pra falta, coloca um traço.
+                    if (status === 'Presente') {
+                        row.getCell(1).value = new Date().toLocaleString('pt-BR').split(' ')[1];
+                    } else {
+                        row.getCell(1).value = '-';
+                    }
+                }
+            });
+
+            await workbook.xlsx.writeFile(caminhoCompleto);
+        }
+        
+        estaSalvando = false;
+        // Recarrega a página automaticamente para mostrar a tabela e o contador atualizados
+        res.redirect(`/ver/${arquivo}`);
+
+    } catch (error) {
+        estaSalvando = false;
+        console.error(error);
+        res.status(500).send("Erro ao atualizar a presença.");
+    }
+});
+
+// PÁGINA PARA GERENCIAR TURMAS
 app.get('/turmas', (req, res) => {
     const turmas = getTurmas();
     const nomesTurmas = Object.keys(turmas);
@@ -597,6 +650,7 @@ app.get('/chamada', async (req, res) => {
     }
 });
 
+// SALVA O FORMULÁRIO DO ALUNO
 app.post('/registrar', async (req, res) => {
     try {
         const aluno = req.body.nomeAluno.trim();
@@ -648,6 +702,7 @@ app.post('/registrar', async (req, res) => {
     }
 });
 
+// DOWNLOAD DA PLANILHA
 app.get('/baixar/:nomeDoArquivo', (req, res) => {
     const arquivoRequisitado = req.params.nomeDoArquivo;
     if (arquivoRequisitado.endsWith('.xlsx')) {
@@ -662,6 +717,7 @@ app.get('/baixar/:nomeDoArquivo', (req, res) => {
     }
 });
 
+// EXCLUIR PLANILHA
 app.post('/excluir/:nomeDoArquivo', (req, res) => {
     const arquivoRequisitado = req.params.nomeDoArquivo;
     if (arquivoRequisitado.endsWith('.xlsx') && !arquivoRequisitado.includes('..')) {
