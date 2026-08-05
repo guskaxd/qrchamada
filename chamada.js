@@ -118,7 +118,7 @@ app.get('/', (req, res) => {
     if (arquivos.length === 0) {
         arquivosHtml = `
             <div class="empty-state">
-                <span style="font-size: 24px;">📭</span>
+                <span style="font-size: 24px;"></span>
                 <p>Nenhuma chamada registrada ainda.</p>
             </div>`;
     } else {
@@ -128,7 +128,7 @@ app.get('/', (req, res) => {
                 <div class="file-item-container">
                     <a href="/ver/${arq}" class="file-link" title="Ver presença na web">
                         <div class="file-info">
-                            <span class="file-icon">📋</span>
+                            <span class="file-icon"></span>
                             <span class="file-name">${nomeExibicao}</span>
                         </div>
                     </a>
@@ -184,7 +184,7 @@ app.get('/', (req, res) => {
         <body>
             <div class="card">
                 <div class="header">
-                    <img src="/ifma.png" alt="Logo IFMA" class="logo-ifma" onerror="this.style.display='none'">
+                    <img src="/ifma.jpg" alt="Logo IFMA" class="logo-ifma" onerror="this.style.display='none'">
                     <h1>Chamada Digital</h1>
                     <p style="font-size: 14px; margin-top: 5px;">Sistema de presenças do professor</p>
                 </div>
@@ -203,16 +203,16 @@ app.get('/', (req, res) => {
                     </div>
                     
                     <button type="submit" class="btn" ${nomesTurmas.length === 0 ? 'disabled style="opacity: 0.5;"' : ''}>
-                        <span>📱</span> Gerar QR Code
+                        <span></span> Gerar QR Code
                     </button>
                 </form>
                 
                 <a href="/turmas" class="btn btn-secondary" style="text-decoration: none;">
-                    <span>⚙️</span> Gerenciar Turmas e Alunos
+                    <span></span> Gerenciar Turmas e Alunos
                 </a>
 
                 <div class="history-section">
-                    <h3>📋 Relatórios de Presença</h3>
+                    <h3>Relatórios de Presença</h3>
                     <div class="file-list">
                         ${arquivosHtml}
                     </div>
@@ -323,7 +323,7 @@ app.get('/ver/:nomeDoArquivo', async (req, res) => {
             <body>
                 <div class="container">
                     <div class="header">
-                        <h1>📋 ${nomeExibicao}</h1>
+                        <h1>${nomeExibicao}</h1>
                     </div>
 
                     <div class="stats">
@@ -340,8 +340,6 @@ app.get('/ver/:nomeDoArquivo', async (req, res) => {
                             <p>Faltas</p>
                         </div>
                     </div>
-                    
-                    <p style="font-size: 13px; color: #666; margin-bottom: 10px;">💡 Dica: Clique no status de um aluno para alterar manualmente.</p>
 
                     <table>
                         <thead>
@@ -472,7 +470,7 @@ app.get('/turmas', (req, res) => {
         <body>
             <div class="card">
                 <div class="header">
-                    <h1>⚙️ Gerenciar Turmas</h1>
+                    <h1> Gerenciar Turmas</h1>
                     <p style="color: var(--text-muted); font-size: 14px;">Cadastre uma nova turma e cole a lista de alunos correspondente.</p>
                 </div>
                 
