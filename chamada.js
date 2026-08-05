@@ -3,8 +3,8 @@ const QRCode = require('qrcode');
 const ExcelJS = require('exceljs');
 const fs = require('fs');
 const path = require('path');
-const app = express();
 
+const app = express();
 app.use(express.static('public'));
 app.use(express.urlencoded({ extended: true }));
 
@@ -15,25 +15,20 @@ const ARQUIVO_TURMAS = path.join(DIRETORIO_DADOS, 'turmas.json');
 
 let estaSalvando = false;
 
-// Garante que o diretório /data existe
 if (!fs.existsSync(DIRETORIO_DADOS)) {
     fs.mkdirSync(DIRETORIO_DADOS, { recursive: true });
 }
 
-// Funções para gerenciar o "Banco de Dados" de Turmas
 function getTurmas() {
-    if (!fs.existsSync(ARQUIVO_TURMAS)) {
-        return {}; // Retorna objeto vazio se o arquivo não existir
-    }
-    const dados = fs.readFileSync(ARQUIVO_TURMAS, 'utf-8');
-    return JSON.parse(dados);
+    if (!fs.existsSync(ARQUIVO_TURMAS)) return {};
+    return JSON.parse(fs.readFileSync(ARQUIVO_TURMAS, 'utf-8'));
 }
 
 function salvarTurmas(turmas) {
     fs.writeFileSync(ARQUIVO_TURMAS, JSON.stringify(turmas, null, 2));
 }
 
-// 1. FUNÇÃO DE REGISTRO NO EXCEL
+// 1. FUNÇÃO DE REGISTRO
 async function registrarPresenca(nomeAluno, dataChamada, disciplina) {
     while (estaSalvando) {
         await new Promise(resolve => setTimeout(resolve, 500));
@@ -72,7 +67,7 @@ async function registrarPresenca(nomeAluno, dataChamada, disciplina) {
                     if (row.getCell(3).value === 'Presente') {
                         jaRegistrado = true;
                     } else {
-                        row.getCell(1).value = new Date().toLocaleString('pt-BR'); 
+                        row.getCell(1).value = new Date().toLocaleString('pt-BR').split(' ')[1]; // Salva só a hora
                         row.getCell(3).value = 'Presente';
                     }
                 }
@@ -85,7 +80,7 @@ async function registrarPresenca(nomeAluno, dataChamada, disciplina) {
 
         if (!encontrou) {
             worksheet.addRow([
-                new Date().toLocaleString('pt-BR'),
+                new Date().toLocaleString('pt-BR').split(' ')[1],
                 nomeAluno,
                 'Presente'
             ]);
@@ -101,13 +96,12 @@ async function registrarPresenca(nomeAluno, dataChamada, disciplina) {
     }
 }
 
-// ROTA 1: PAINEL INICIAL (Agora com caixa de seleção de turmas salvas)
+// ROTA 1: PAINEL INICIAL
 app.get('/', (req, res) => {
     const hoje = new Date().toISOString().split('T')[0]; 
     const turmas = getTurmas();
     const nomesTurmas = Object.keys(turmas);
     
-    // Constrói as opções do menu de turmas
     let opcoesTurmasHtml = '';
     if (nomesTurmas.length === 0) {
         opcoesTurmasHtml = `<option value="" disabled selected>Nenhuma turma cadastrada...</option>`;
@@ -125,22 +119,23 @@ app.get('/', (req, res) => {
         arquivosHtml = `
             <div class="empty-state">
                 <span style="font-size: 24px;">📭</span>
-                <p>Nenhuma planilha criada ainda.</p>
+                <p>Nenhuma chamada registrada ainda.</p>
             </div>`;
     } else {
         arquivos.forEach(arq => {
             const nomeExibicao = arq.replace('presenca_', '').replace('.xlsx', '').replace(/_/g, ' ');
+            // O botão principal agora leva para a visualização na web (/ver)
             arquivosHtml += `
                 <div class="file-item-container">
-                    <a href="/baixar/${arq}" class="file-link" title="Baixar planilha">
+                    <a href="/ver/${arq}" class="file-link" title="Ver presença na web">
                         <div class="file-info">
-                            <span class="file-icon">📊</span>
+                            <span class="file-icon">📋</span>
                             <span class="file-name">${nomeExibicao}</span>
                         </div>
-                        <span class="download-icon">📥</span>
                     </a>
+                    <a href="/baixar/${arq}" class="btn-action" title="Baixar planilha">📥</a>
                     <form action="/excluir/${arq}" method="POST" style="margin: 0;">
-                        <button type="submit" class="btn-delete" title="Excluir planilha" onclick="return confirm('Tem certeza que deseja excluir a planilha de ${nomeExibicao}? Esta ação não pode ser desfeita.')">
+                        <button type="submit" class="btn-delete" title="Excluir" onclick="return confirm('Tem certeza que deseja excluir a chamada de ${nomeExibicao}?')">
                             🗑️
                         </button>
                     </form>
@@ -158,50 +153,41 @@ app.get('/', (req, res) => {
             <title>Chamada Digital - IFMA</title>
             <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
             <style>
-                :root { --primary: #2ea44f; --primary-hover: #22863a; --bg-color: #f6f8fa; --card-bg: #ffffff; --text-dark: #24292e; --text-muted: #586069; --border-color: #e1e4e8; --danger: #d73a49; --danger-hover: #cb2431; --blue: #0366d6; --blue-hover: #005cc5;}
+                :root { --primary: #2ea44f; --primary-hover: #22863a; --bg-color: #f6f8fa; --card-bg: #ffffff; --text-dark: #24292e; --text-muted: #586069; --border-color: #e1e4e8; --blue: #0366d6; --blue-hover: #005cc5;}
                 * { box-sizing: border-box; margin: 0; padding: 0; }
-                body { font-family: 'Inter', -apple-system, sans-serif; background-color: var(--bg-color); color: var(--text-dark); display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 20px; }
-                .card { background: var(--card-bg); padding: 40px; border-radius: 16px; box-shadow: 0 12px 28px rgba(0,0,0,0.05), 0 2px 4px rgba(0,0,0,0.03); width: 100%; max-width: 480px; }
+                body { font-family: 'Inter', sans-serif; background-color: var(--bg-color); color: var(--text-dark); display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 20px; }
+                .card { background: var(--card-bg); padding: 40px; border-radius: 16px; box-shadow: 0 12px 28px rgba(0,0,0,0.05); width: 100%; max-width: 480px; }
                 .header { text-align: center; margin-bottom: 30px; }
                 .logo-ifma { width: 100px; height: auto; margin-bottom: 15px; }
                 .header h1 { font-size: 24px; font-weight: 700; margin-bottom: 8px; color: var(--text-dark); }
-                .header p { color: var(--text-muted); font-size: 15px; line-height: 1.5; }
                 .input-group { margin-bottom: 20px; text-align: left; }
                 label { display: block; margin-bottom: 8px; font-weight: 600; font-size: 14px; color: var(--text-dark); }
-                input[type="text"], input[type="date"], select, textarea { width: 100%; padding: 12px 16px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 15px; font-family: 'Inter', sans-serif; transition: all 0.2s ease; background-color: #fafbfc; }
-                input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(46, 164, 79, 0.15); background-color: #fff; }
-                .btn { display: flex; justify-content: center; align-items: center; gap: 8px; width: 100%; background-color: var(--primary); color: white; padding: 14px; border: none; font-size: 16px; font-weight: 600; border-radius: 8px; cursor: pointer; transition: background-color 0.2s, transform 0.1s; margin-bottom: 25px; }
+                input[type="date"], select { width: 100%; padding: 12px 16px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 15px; font-family: 'Inter', sans-serif; transition: all 0.2s; background-color: #fafbfc; }
+                input[type="date"]:focus, select:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(46, 164, 79, 0.15); background-color: #fff; }
+                .btn { display: flex; justify-content: center; align-items: center; gap: 8px; width: 100%; background-color: var(--primary); color: white; padding: 14px; border: none; font-size: 16px; font-weight: 600; border-radius: 8px; cursor: pointer; transition: 0.2s; margin-bottom: 20px; }
                 .btn:hover { background-color: var(--primary-hover); }
-                .btn:active { transform: scale(0.98); }
                 .btn-secondary { background-color: var(--blue); margin-bottom: 35px;}
                 .btn-secondary:hover { background-color: var(--blue-hover); }
                 .history-section { border-top: 1px solid var(--border-color); padding-top: 25px; }
-                .history-section h3 { font-size: 16px; font-weight: 600; margin-bottom: 15px; color: var(--text-dark); display: flex; align-items: center; gap: 6px; }
+                .history-section h3 { font-size: 16px; font-weight: 600; margin-bottom: 15px; display: flex; align-items: center; gap: 6px; }
                 .file-list { display: flex; flex-direction: column; gap: 10px; max-height: 250px; overflow-y: auto; padding-right: 5px; }
-                .file-list::-webkit-scrollbar { width: 6px; }
-                .file-list::-webkit-scrollbar-track { background: transparent; }
-                .file-list::-webkit-scrollbar-thumb { background-color: #d1d5da; border-radius: 10px; }
-                .file-item-container { display: flex; align-items: center; gap: 8px; background-color: #fff; border: 1px solid var(--border-color); border-radius: 8px; transition: all 0.2s ease; }
-                .file-item-container:hover { border-color: var(--primary); box-shadow: 0 4px 12px rgba(0,0,0,0.05); transform: translateY(-2px); }
-                .file-link { flex: 1; display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; text-decoration: none; color: var(--text-dark); border-radius: 8px 0 0 8px; }
-                .file-info { display: flex; align-items: center; gap: 10px; }
-                .file-icon { font-size: 18px; }
-                .file-name { font-size: 14px; font-weight: 500; }
-                .download-icon { color: var(--text-muted); font-size: 16px; transition: color 0.2s; }
-                .file-link:hover .download-icon { color: var(--primary); }
-                .btn-delete { background: none; border: none; padding: 12px 16px; cursor: pointer; border-left: 1px solid var(--border-color); font-size: 16px; transition: background-color 0.2s; border-radius: 0 8px 8px 0; }
+                .file-item-container { display: flex; align-items: center; background-color: #fff; border: 1px solid var(--border-color); border-radius: 8px; transition: all 0.2s; }
+                .file-item-container:hover { border-color: var(--blue); box-shadow: 0 4px 12px rgba(0,0,0,0.05); transform: translateY(-2px); }
+                .file-link { flex: 1; display: flex; align-items: center; padding: 12px 16px; text-decoration: none; color: var(--text-dark); border-radius: 8px 0 0 8px; }
+                .file-info { display: flex; align-items: center; gap: 10px; font-weight: 500; font-size: 14px; }
+                .btn-action { text-decoration: none; color: var(--text-dark); padding: 12px 10px; transition: 0.2s; border-left: 1px solid var(--border-color); }
+                .btn-action:hover { background-color: #eaf5ff; }
+                .btn-delete { background: none; border: none; padding: 12px 16px; cursor: pointer; border-left: 1px solid var(--border-color); font-size: 16px; transition: 0.2s; border-radius: 0 8px 8px 0; }
                 .btn-delete:hover { background-color: #ffeef0; }
-                .btn-delete:active { background-color: #ffdce0; }
                 .empty-state { text-align: center; padding: 20px 0; color: var(--text-muted); }
-                .empty-state p { margin-top: 8px; font-size: 14px; }
             </style>
         </head>
         <body>
             <div class="card">
                 <div class="header">
-                    <img src="/ifma.png" alt="Logo IFMA" class="logo-ifma" onerror="this.style.display='none'">
+                    <img src="/logo-ifma.png" alt="Logo IFMA" class="logo-ifma" onerror="this.style.display='none'">
                     <h1>Chamada Digital</h1>
-                    <p>Selecione a turma e a data para gerar o QR Code.</p>
+                    <p style="font-size: 14px; margin-top: 5px;">Sistema de presenças do professor</p>
                 </div>
                 
                 <form action="/qr-turma" method="POST">
@@ -217,18 +203,17 @@ app.get('/', (req, res) => {
                         <input type="date" id="data" name="data" value="${hoje}" required>
                     </div>
                     
-                    <button type="submit" class="btn" ${nomesTurmas.length === 0 ? 'disabled style="opacity: 0.5; cursor: not-allowed;"' : ''}>
-                        <span>📱</span> Gerar QR Code da Turma
+                    <button type="submit" class="btn" ${nomesTurmas.length === 0 ? 'disabled style="opacity: 0.5;"' : ''}>
+                        <span>📱</span> Gerar QR Code
                     </button>
                 </form>
                 
-                <!-- Botão para gerenciar turmas -->
                 <a href="/turmas" class="btn btn-secondary" style="text-decoration: none;">
                     <span>⚙️</span> Gerenciar Turmas e Alunos
                 </a>
 
                 <div class="history-section">
-                    <h3>📥 Planilhas Salvas</h3>
+                    <h3>📋 Relatórios de Presença</h3>
                     <div class="file-list">
                         ${arquivosHtml}
                     </div>
@@ -239,7 +224,144 @@ app.get('/', (req, res) => {
     `);
 });
 
-// NOVA ROTA: PÁGINA PARA GERENCIAR TURMAS
+// NOVA ROTA: VISUALIZAÇÃO NA WEB DA CHAMADA
+app.get('/ver/:nomeDoArquivo', async (req, res) => {
+    try {
+        const arquivoRequisitado = req.params.nomeDoArquivo;
+        const caminhoCompleto = path.join(DIRETORIO_DADOS, arquivoRequisitado);
+
+        if (!fs.existsSync(caminhoCompleto)) {
+            return res.status(404).send("Arquivo não encontrado.");
+        }
+
+        const workbook = new ExcelJS.Workbook();
+        await workbook.xlsx.readFile(caminhoCompleto);
+        const worksheet = workbook.getWorksheet('Presencas');
+
+        let linhasHtml = '';
+        let totalAlunos = 0;
+        let qtdPresentes = 0;
+        let qtdFaltas = 0;
+
+        worksheet.eachRow((row, rowNumber) => {
+            if (rowNumber > 1) { // Pula o cabeçalho
+                totalAlunos++;
+                const hora = row.getCell(1).value || '-';
+                const nome = row.getCell(2).value || '';
+                const status = row.getCell(3).value || 'Falta';
+
+                let badge = '';
+                if (status === 'Presente') {
+                    qtdPresentes++;
+                    badge = `<span class="badge badge-presente">Presente</span>`;
+                } else {
+                    qtdFaltas++;
+                    badge = `<span class="badge badge-falta">Falta</span>`;
+                }
+
+                linhasHtml += `
+                    <tr>
+                        <td>${nome}</td>
+                        <td>${badge}</td>
+                        <td style="color: #666; font-size: 13px;">${hora}</td>
+                    </tr>
+                `;
+            }
+        });
+
+        // Formata o título
+        const nomeExibicao = arquivoRequisitado.replace('presenca_', '').replace('.xlsx', '').replace(/_/g, ' ');
+
+        res.send(`
+            <!DOCTYPE html>
+            <html lang="pt-BR">
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>Relatório - ${nomeExibicao}</title>
+                <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+                <style>
+                    :root { --bg-color: #f6f8fa; --card-bg: #ffffff; --text-dark: #24292e; --border-color: #e1e4e8; }
+                    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
+                    body { background-color: var(--bg-color); color: var(--text-dark); padding: 30px 20px; display: flex; flex-direction: column; align-items: center; }
+                    
+                    .container { background: var(--card-bg); width: 100%; max-width: 700px; padding: 30px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+                    .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 20px; margin-bottom: 20px; }
+                    .header h1 { font-size: 20px; color: #0366d6; }
+                    
+                    .stats { display: flex; gap: 15px; margin-bottom: 20px; }
+                    .stat-box { flex: 1; background: #fafbfc; border: 1px solid var(--border-color); padding: 15px; border-radius: 8px; text-align: center; }
+                    .stat-box h3 { font-size: 24px; margin-bottom: 5px; }
+                    .stat-box p { font-size: 13px; color: #666; font-weight: 500; text-transform: uppercase; }
+                    
+                    table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
+                    th, td { padding: 12px 15px; text-align: left; border-bottom: 1px solid var(--border-color); }
+                    th { background-color: #f6f8fa; font-size: 13px; color: #586069; text-transform: uppercase; }
+                    td { font-size: 15px; font-weight: 500; }
+                    tr:hover { background-color: #fafdff; }
+                    
+                    .badge { padding: 5px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+                    .badge-presente { background-color: #dcffe4; color: #1a7f37; border: 1px solid #a3ebba; }
+                    .badge-falta { background-color: #ffeef0; color: #d73a49; border: 1px solid #ffdce0; }
+                    
+                    .actions { display: flex; justify-content: space-between; gap: 15px; }
+                    .btn { flex: 1; text-align: center; text-decoration: none; padding: 12px; border-radius: 8px; font-weight: 600; font-size: 15px; transition: 0.2s; }
+                    .btn-back { background-color: #e1e4e8; color: #24292e; }
+                    .btn-back:hover { background-color: #d1d5da; }
+                    .btn-download { background-color: #2ea44f; color: white; }
+                    .btn-download:hover { background-color: #22863a; }
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <div class="header">
+                        <h1>📋 ${nomeExibicao}</h1>
+                    </div>
+
+                    <div class="stats">
+                        <div class="stat-box">
+                            <h3 style="color: #24292e;">${totalAlunos}</h3>
+                            <p>Total</p>
+                        </div>
+                        <div class="stat-box">
+                            <h3 style="color: #2ea44f;">${qtdPresentes}</h3>
+                            <p>Presentes</p>
+                        </div>
+                        <div class="stat-box">
+                            <h3 style="color: #d73a49;">${qtdFaltas}</h3>
+                            <p>Faltas</p>
+                        </div>
+                    </div>
+
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Aluno</th>
+                                <th>Status</th>
+                                <th>Hora</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${linhasHtml}
+                        </tbody>
+                    </table>
+
+                    <div class="actions">
+                        <a href="/" class="btn btn-back">⬅ Voltar ao Painel</a>
+                        <a href="/baixar/${arquivoRequisitado}" class="btn btn-download">📥 Baixar Excel</a>
+                    </div>
+                </div>
+            </body>
+            </html>
+        `);
+    } catch (err) {
+        console.error(err);
+        res.status(500).send("Erro ao ler a planilha de presenças.");
+    }
+});
+
+
+// ROTA: PÁGINA PARA GERENCIAR TURMAS
 app.get('/turmas', (req, res) => {
     const turmas = getTurmas();
     const nomesTurmas = Object.keys(turmas);
@@ -275,13 +397,12 @@ app.get('/turmas', (req, res) => {
             <title>Gerenciar Turmas</title>
             <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
             <style>
-                /* O mesmo CSS da página principal */
-                :root { --primary: #2ea44f; --primary-hover: #22863a; --bg-color: #f6f8fa; --card-bg: #ffffff; --text-dark: #24292e; --text-muted: #586069; --border-color: #e1e4e8; }
+                :root { --primary: #2ea44f; --bg-color: #f6f8fa; --card-bg: #ffffff; --text-dark: #24292e; --text-muted: #586069; --border-color: #e1e4e8; }
                 * { box-sizing: border-box; margin: 0; padding: 0; }
                 body { font-family: 'Inter', sans-serif; background-color: var(--bg-color); color: var(--text-dark); display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 20px; }
                 .card { background: var(--card-bg); padding: 40px; border-radius: 16px; box-shadow: 0 12px 28px rgba(0,0,0,0.05); width: 100%; max-width: 480px; }
                 .header { text-align: center; margin-bottom: 30px; }
-                .header h1 { font-size: 24px; font-weight: 700; margin-bottom: 8px; color: var(--text-dark); }
+                .header h1 { font-size: 24px; font-weight: 700; margin-bottom: 8px;}
                 .input-group { margin-bottom: 20px; text-align: left; }
                 label { display: block; margin-bottom: 8px; font-weight: 600; font-size: 14px; }
                 input[type="text"], textarea { width: 100%; padding: 12px 16px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 15px; font-family: 'Inter', sans-serif; }
@@ -305,15 +426,13 @@ app.get('/turmas', (req, res) => {
                 <form action="/turmas/adicionar" method="POST">
                     <div class="input-group">
                         <label for="nomeTurma">Nome da Turma / Disciplina</label>
-                        <input type="text" id="nomeTurma" name="nomeTurma" placeholder="Ex: Informática 2 - Matutino" required autocomplete="off">
+                        <input type="text" id="nomeTurma" name="nomeTurma" placeholder="Ex: Informática 2" required autocomplete="off">
                     </div>
-                    
                     <div class="input-group">
                         <label for="listaAlunos">Lista de Alunos</label>
                         <p style="font-size: 12px; color: #666; margin-top: -5px; margin-bottom: 8px;">Cole o nome dos alunos (um por linha).</p>
-                        <textarea id="listaAlunos" name="listaAlunos" rows="6" placeholder="Ex:&#10;Ana Silva&#10;Bruno Costa&#10;Carlos Souza..." required></textarea>
+                        <textarea id="listaAlunos" name="listaAlunos" rows="6" placeholder="Ex:&#10;Ana Silva&#10;Bruno Costa..." required></textarea>
                     </div>
-                    
                     <button type="submit" class="btn">➕ Salvar Turma</button>
                 </form>
 
@@ -331,50 +450,39 @@ app.get('/turmas', (req, res) => {
     `);
 });
 
-// NOVA ROTA: SALVAR UMA NOVA TURMA
 app.post('/turmas/adicionar', (req, res) => {
     const nomeTurma = req.body.nomeTurma.trim();
     const listaAlunosRaw = req.body.listaAlunos || '';
-    
-    // Transforma o texto em um array de alunos limpo
     const alunos = listaAlunosRaw.split('\n').map(a => a.trim()).filter(a => a.length > 0);
     
     if (nomeTurma && alunos.length > 0) {
         const turmas = getTurmas();
-        turmas[nomeTurma] = alunos; // Adiciona ou atualiza a turma
+        turmas[nomeTurma] = alunos; 
         salvarTurmas(turmas);
     }
-    
     res.redirect('/turmas');
 });
 
-// NOVA ROTA: EXCLUIR UMA TURMA
 app.post('/turmas/excluir/:nome', (req, res) => {
     const nomeTurma = req.params.nome;
     const turmas = getTurmas();
-    
     if (turmas[nomeTurma]) {
         delete turmas[nomeTurma];
         salvarTurmas(turmas);
     }
-    
     res.redirect('/turmas');
 });
 
-
-// ROTA 2: GERA O QR CODE (Agora lê os alunos do arquivo JSON)
+// GERA O QR CODE E CRIA PLANILHA
 app.post('/qr-turma', async (req, res) => {
     try {
         const dataAula = req.body.data;
-        const disciplina = req.body.disciplina; // Que agora vem do <select>
-        
+        const disciplina = req.body.disciplina; 
         const turmas = getTurmas();
         const alunosDaTurma = turmas[disciplina] || [];
-        
         const discFormatada = disciplina.replace(/[^a-zA-Z0-9]/g, '_');
         const nomeArquivo = path.join(DIRETORIO_DADOS, `presenca_${discFormatada}_${dataAula}.xlsx`);
 
-        // Se a planilha do dia não existir, cria preenchida com Faltas baseada na lista salva
         if (!fs.existsSync(nomeArquivo)) {
             const workbook = new ExcelJS.Workbook();
             const worksheet = workbook.addWorksheet('Presencas');
@@ -385,7 +493,6 @@ app.post('/qr-turma', async (req, res) => {
             worksheet.getColumn(2).width = 30;
             worksheet.getColumn(3).width = 15;
 
-            // Adiciona todos os alunos da turma como "Falta"
             alunosDaTurma.forEach(aluno => {
                 worksheet.addRow(['-', aluno, 'Falta']);
             });
@@ -402,12 +509,12 @@ app.post('/qr-turma', async (req, res) => {
         res.send(`
             <div style="text-align: center; margin-top: 50px; font-family: sans-serif;">
                 <h2>QR Code da Turma</h2>
-                <h3 style="color: #007bff; margin-bottom: 5px;">${disciplina}</h3>
+                <h3 style="color: #0366d6; margin-bottom: 5px;">${disciplina}</h3>
                 <h4 style="color: #666; margin-top: 0;">Aula do dia: ${dataBr}</h4>
                 <p>Alunos, escaneiem este código para registrar a presença.</p>
                 <img src="${qrImage}" alt="QR Code" style="width: 400px; height: 400px;">
                 <br><br>
-                <a href="/" style="text-decoration: none; color: #007bff; font-weight: bold;">⬅ Voltar ao Painel</a>
+                <a href="/" style="text-decoration: none; color: #0366d6; font-weight: bold;">⬅ Voltar ao Painel</a>
             </div>
         `);
     } catch (error) {
@@ -415,29 +522,24 @@ app.post('/qr-turma', async (req, res) => {
     }
 });
 
-
-// ROTA 3: FORMULÁRIO DO ALUNO (Carrega os nomes salvos no JSON)
+// FORMULÁRIO DO ALUNO
 app.get('/chamada', async (req, res) => {
     try {
         const dataAula = req.query.data;
         const disciplina = req.query.disciplina;
         const discFormatada = disciplina.replace(/[^a-zA-Z0-9]/g, '_');
         const chaveTrava = `trava_${discFormatada}_${dataAula}`; 
-        
-        // Puxa a lista original dos alunos do Banco de Dados JSON
         const turmas = getTurmas();
         const alunosDaTurma = turmas[disciplina] || [];
 
         let optionsHtml = '<option value="" disabled selected>Selecione seu nome na lista...</option>';
 
         if (alunosDaTurma.length > 0) {
-            // Se a turma existe e tem alunos, gera o menu de seleção em ordem alfabética (opcional)
             alunosDaTurma.sort().forEach(nome => {
                 optionsHtml += `<option value="${nome}">${nome}</option>`;
             });
             inputHtml = `<select name="nomeAluno" required>${optionsHtml}</select>`;
         } else {
-            // Fallback: Se por acaso a turma não tiver alunos, volta pro campo de texto livre
             inputHtml = `<input type="text" name="nomeAluno" placeholder="Seu nome completo" required autocomplete="off">`;
         }
 
@@ -448,21 +550,22 @@ app.get('/chamada', async (req, res) => {
                 <meta charset="UTF-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
                 <title>Lista de Presença</title>
+                <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
                 <style>
-                    body { font-family: sans-serif; background-color: #e9ecef; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
-                    .card { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); text-align: center; width: 90%; max-width: 350px; }
-                    input[type="text"], select { width: 100%; padding: 12px; margin: 20px 0; border: 1px solid #ccc; border-radius: 6px; font-size: 16px; box-sizing: border-box; background-color: #fff; }
-                    button { background-color: #28a745; color: white; border: none; padding: 15px; width: 100%; border-radius: 6px; font-size: 18px; font-weight: bold; cursor: pointer; }
-                    button:hover { background-color: #218838; }
+                    body { font-family: 'Inter', sans-serif; background-color: #f6f8fa; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+                    .card { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); text-align: center; width: 90%; max-width: 380px; }
+                    input[type="text"], select { width: 100%; padding: 14px; margin: 20px 0; border: 1px solid #e1e4e8; border-radius: 8px; font-size: 16px; background-color: #fafbfc; }
+                    input[type="text"]:focus, select:focus { outline: none; border-color: #0366d6; box-shadow: 0 0 0 3px rgba(3, 102, 214, 0.15); }
+                    button { background-color: #2ea44f; color: white; border: none; padding: 15px; width: 100%; border-radius: 8px; font-size: 18px; font-weight: 600; cursor: pointer; }
                     #bloqueio { display: none; color: #856404; background-color: #fff3cd; padding: 20px; border-radius: 8px; border: 1px solid #ffeeba; }
-                    .tag-disciplina { display: inline-block; background-color: #007bff; color: white; padding: 5px 10px; border-radius: 20px; font-size: 12px; font-weight: bold; margin-bottom: 10px; }
+                    .tag-disciplina { display: inline-block; background-color: #0366d6; color: white; padding: 5px 12px; border-radius: 20px; font-size: 13px; font-weight: bold; margin-bottom: 15px; }
                 </style>
             </head>
             <body>
                 <div class="card" id="painel-principal">
                     <h2>📝 Registrar Presença</h2>
                     <span class="tag-disciplina">${disciplina}</span>
-                    <p>Identifique-se abaixo para marcar presença:</p>
+                    <p style="color: #586069; font-size: 15px;">Identifique-se abaixo para marcar presença:</p>
                     <form action="/registrar" method="POST">
                         <input type="hidden" name="dataChamada" value="${dataAula}">
                         <input type="hidden" name="disciplina" value="${disciplina}">
@@ -494,8 +597,6 @@ app.get('/chamada', async (req, res) => {
     }
 });
 
-
-// ROTA 4: RECEBE OS DADOS E SALVA
 app.post('/registrar', async (req, res) => {
     try {
         const aluno = req.body.nomeAluno.trim();
@@ -520,10 +621,11 @@ app.post('/registrar', async (req, res) => {
         res.setHeader('Set-Cookie', `${chaveTrava}=sim; Max-Age=36000; Path=/`);
         
         res.send(`
-            <div style="text-align: center; margin-top: 50px; font-family: sans-serif; color: green;">
+            <div style="text-align: center; margin-top: 50px; font-family: sans-serif; color: #2ea44f;">
                 <h1 style="font-size: 60px; margin: 0;">✅</h1>
                 <h1>Presença Confirmada!</h1>
-                <p>Obrigado, <strong>${aluno}</strong>. Você já pode fechar esta página.</p>
+                <p style="color: #24292e">Obrigado, <strong>${aluno}</strong>.</p>
+                <p style="color: #586069; font-size: 14px;">Você já pode fechar esta página.</p>
             </div>
             <script>
                 localStorage.setItem('${chaveTrava}', 'sim');
@@ -546,7 +648,6 @@ app.post('/registrar', async (req, res) => {
     }
 });
 
-// ROTA 5: DOWNLOAD
 app.get('/baixar/:nomeDoArquivo', (req, res) => {
     const arquivoRequisitado = req.params.nomeDoArquivo;
     if (arquivoRequisitado.endsWith('.xlsx')) {
@@ -561,7 +662,6 @@ app.get('/baixar/:nomeDoArquivo', (req, res) => {
     }
 });
 
-// ROTA 6: EXCLUIR PLANILHA
 app.post('/excluir/:nomeDoArquivo', (req, res) => {
     const arquivoRequisitado = req.params.nomeDoArquivo;
     if (arquivoRequisitado.endsWith('.xlsx') && !arquivoRequisitado.includes('..')) {
