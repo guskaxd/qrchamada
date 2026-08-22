@@ -181,6 +181,27 @@ app.get('/cadastrar', (req, res) => {
     `);
 });
 
+// ROTA SECRETA: VER TODOS OS PROFESSORES CADASTRADOS
+app.get('/painel-mestre', (req, res) => {
+    // Verifica se a chave passada na URL é a mesma MASTER_KEY do sistema
+    if (req.query.chave === MASTER_KEY) {
+        const usuarios = getUsuarios();
+        
+        let html = '<h2 style="font-family: sans-serif;">Lista de Professores</h2>';
+        html += '<table border="1" cellpadding="10" style="border-collapse: collapse; font-family: sans-serif;">';
+        html += '<tr><th>Usuário</th><th>Senha</th></tr>';
+        
+        for (const [user, password] of Object.entries(usuarios)) {
+            html += `<tr><td>${user}</td><td>${password}</td></tr>`;
+        }
+        
+        html += '</table>';
+        res.send(html);
+    } else {
+        res.status(403).send('Acesso Negado. Chave incorreta.');
+    }
+});
+
 app.post('/cadastrar', (req, res) => {
     const { novoUsuario, novaSenha, masterKey } = req.body;
     
