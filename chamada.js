@@ -11,10 +11,12 @@ app.use(express.urlencoded({ extended: true }));
 const PORT = process.env.PORT || 3000;
 const DIRETORIO_DADOS = '/data';
 const DOMINIO_PUBLICO = 'https://qrchamada-production.up.railway.app';
-const ARQUIVO_TURMAS = path.join(DIRETORIO_DADOS, 'turmas.json');
 
-// SENHA DO PAINEL (Você pode mudar aqui ou nas variáveis do Railway)
-const SENHA_ADMIN = process.env.SENHA_ADMIN || '123456';
+// ==========================================
+// CONFIGURAÇÕES DO SISTEMA MULTI-PROFESSORES
+// ==========================================
+const MASTER_KEY = process.env.MASTER_KEY || '123456'; // Código necessário para cadastrar um novo professor
+const ARQUIVO_USUARIOS = path.join(DIRETORIO_DADOS, 'usuarios.json');
 
 let estaSalvando = false;
 
@@ -22,32 +24,60 @@ if (!fs.existsSync(DIRETORIO_DADOS)) {
     fs.mkdirSync(DIRETORIO_DADOS, { recursive: true });
 }
 
-function getTurmas() {
-    if (!fs.existsSync(ARQUIVO_TURMAS)) return {};
-    return JSON.parse(fs.readFileSync(ARQUIVO_TURMAS, 'utf-8'));
-}
-
-function salvarTurmas(turmas) {
-    fs.writeFileSync(ARQUIVO_TURMAS, JSON.stringify(turmas, null, 2));
-}
-
-// === MIDDLEWARE DE AUTENTICAÇÃO ===
-// Essa função verifica se o navegador tem o "passe livre" do professor
-function checkAuth(req, res, next) {
-    if (req.headers.cookie && req.headers.cookie.includes('admin_token=logado')) {
-        next(); // Pode passar!
-    } else {
-        res.redirect('/login'); // Barrado, vai fazer login!
+// Gerencia o banco de dados de usuários (Logins e Senhas)
+function getUsuarios() {
+    if (!fs.existsSync(ARQUIVO_USUARIOS)) {
+        // Se não existir, cria o usuário admin padrão
+        const defaultUsers = { "admin": "123456" };
+        fs.writeFileSync(ARQUIVO_USUARIOS, JSON.stringify(defaultUsers, null, 2));
+        return defaultUsers;
     }
+    return JSON.parse(fs.readFileSync(ARQUIVO_USUARIOS, 'utf-8'));
 }
+
+// Funções de Turma agora exigem saber QUAL professor está pedindo
+function getTurmas(prof) {
+    const arquivo = path.join(DIRETORIO_DADOS, prof, 'turmas.json');
+    if (!fs.existsSync(arquivo)) return {};
+    return JSON.parse(fs.readFileSync(arquivo, 'utf-8'));
+}
+
+function salvarTurmas(prof, turmas) {
+    const dir = path.join(DIRETORIO_DADOS, prof);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'turmas.json'), JSON.stringify(turmas, null, 2));
+}
+
+// === MIDDLEWARE DE AUTENTICAÇÃO (VERIFICA O PROFESSOR) ===
+function checkAuth(req, res, next) {
+    const cookies = req.headers.cookie || '';
+    const match = cookies.match(/prof_user=([^;]+)/);
+    
+    if (match) {
+        const user = match[1];
+        const usuarios = getUsuarios();
+        
+        if (usuarios[user]) {
+            req.usuario = user; // Salva o nome do professor na requisição
+            
+            // Garante que a pasta desse professor existe
+            const dir = path.join(DIRETORIO_DADOS, user);
+            if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+            
+            return next(); // Pode passar!
+        }
+    }
+    res.redirect('/login'); // Barrado, vai fazer login
+}
+
 
 // ===================================
-// ROTAS DE LOGIN E LOGOUT
+// ROTAS DE LOGIN E CADASTRO
 // ===================================
 
 app.get('/login', (req, res) => {
-    // Se a senha estiver errada, a rota POST adiciona ?erro=1 na URL
-    const erroMsg = req.query.erro ? '<p style="color: #d73a49; font-weight: bold; margin-bottom: 15px;">Senha incorreta!</p>' : '';
+    const erroMsg = req.query.erro ? '<p style="color: #d73a49; font-weight: bold; margin-bottom: 15px;">Usuário ou senha incorretos!</p>' : '';
+    const sucessoMsg = req.query.sucesso ? '<p style="color: #2ea44f; font-weight: bold; margin-bottom: 15px;">Conta criada! Faça login.</p>' : '';
 
     res.send(`
         <!DOCTYPE html>
@@ -59,25 +89,30 @@ app.get('/login', (req, res) => {
             <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
             <style>
                 :root { --primary: #2ea44f; --primary-hover: #22863a; --bg-color: #f6f8fa; --card-bg: #ffffff; --text-dark: #24292e; --border-color: #e1e4e8; }
-                * { box-sizing: border-box; margin: 0; padding: 0; }
-                body { font-family: 'Inter', sans-serif; background-color: var(--bg-color); color: var(--text-dark); display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 20px; }
+                * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif;}
+                body { background-color: var(--bg-color); color: var(--text-dark); display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 20px; }
                 .card { background: var(--card-bg); padding: 40px; border-radius: 16px; box-shadow: 0 12px 28px rgba(0,0,0,0.05); width: 100%; max-width: 400px; text-align: center; }
                 .logo-ifma { width: 100px; height: auto; margin-bottom: 15px; }
-                input[type="password"] { width: 100%; padding: 14px; margin-bottom: 20px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 16px; text-align: center; letter-spacing: 2px;}
-                input[type="password"]:focus { outline: none; border-color: #0366d6; box-shadow: 0 0 0 3px rgba(3, 102, 214, 0.15); }
+                input { width: 100%; padding: 14px; margin-bottom: 15px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 15px; }
+                input:focus { outline: none; border-color: #0366d6; box-shadow: 0 0 0 3px rgba(3, 102, 214, 0.15); }
                 button { background-color: var(--primary); color: white; border: none; padding: 15px; width: 100%; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; transition: 0.2s; }
                 button:hover { background-color: var(--primary-hover); }
+                .link-bottom { display: block; margin-top: 20px; color: #0366d6; text-decoration: none; font-weight: 500; }
+                .link-bottom:hover { text-decoration: underline; }
             </style>
         </head>
         <body>
             <div class="card">
                 <img src="/logo-ifma.png" alt="Logo IFMA" class="logo-ifma" onerror="this.style.display='none'">
-                <h2 style="margin-bottom: 20px;">Acesso Restrito</h2>
+                <h2 style="margin-bottom: 20px;">Acesso do Professor</h2>
                 ${erroMsg}
+                ${sucessoMsg}
                 <form action="/login" method="POST">
-                    <input type="password" name="senha" placeholder="Digite a senha do professor" required autofocus>
-                    <button type="submit">Entrar</button>
+                    <input type="text" name="usuario" placeholder="Nome de Usuário (ex: admin)" required autofocus autocomplete="off">
+                    <input type="password" name="senha" placeholder="Senha" required>
+                    <button type="submit">Entrar no Painel</button>
                 </form>
+                <a href="/cadastrar" class="link-bottom">Primeiro acesso? Criar conta</a>
             </div>
         </body>
         </html>
@@ -85,9 +120,11 @@ app.get('/login', (req, res) => {
 });
 
 app.post('/login', (req, res) => {
-    if (req.body.senha === SENHA_ADMIN) {
-        // Se acertou a senha, ganha um cookie válido por 7 dias
-        res.setHeader('Set-Cookie', 'admin_token=logado; Max-Age=604800; Path=/; HttpOnly');
+    const { usuario, senha } = req.body;
+    const usuarios = getUsuarios();
+
+    if (usuarios[usuario] && usuarios[usuario] === senha) {
+        res.setHeader('Set-Cookie', `prof_user=${usuario}; Max-Age=604800; Path=/; HttpOnly`);
         res.redirect('/');
     } else {
         res.redirect('/login?erro=1');
@@ -95,15 +132,85 @@ app.post('/login', (req, res) => {
 });
 
 app.get('/logout', (req, res) => {
-    // Apaga o cookie e expulsa o usuário
-    res.setHeader('Set-Cookie', 'admin_token=; Max-Age=0; Path=/');
+    res.setHeader('Set-Cookie', 'prof_user=; Max-Age=0; Path=/');
     res.redirect('/login');
 });
 
+// Tela de Cadastro de Novos Professores
+app.get('/cadastrar', (req, res) => {
+    const erroMsg = req.query.erro === 'chave' ? '<p style="color: #d73a49; font-weight: bold; margin-bottom: 15px;">Código de Convite Inválido!</p>' : 
+                    req.query.erro === 'existe' ? '<p style="color: #d73a49; font-weight: bold; margin-bottom: 15px;">Este usuário já existe!</p>' : '';
+
+    res.send(`
+        <!DOCTYPE html>
+        <html lang="pt-BR">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Cadastrar Professor</title>
+            <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+            <style>
+                :root { --primary: #0366d6; --primary-hover: #005cc5; --bg-color: #f6f8fa; --card-bg: #ffffff; --text-dark: #24292e; --border-color: #e1e4e8; }
+                * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif;}
+                body { background-color: var(--bg-color); color: var(--text-dark); display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 20px; }
+                .card { background: var(--card-bg); padding: 40px; border-radius: 16px; box-shadow: 0 12px 28px rgba(0,0,0,0.05); width: 100%; max-width: 400px; text-align: center; }
+                input { width: 100%; padding: 14px; margin-bottom: 15px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 15px; }
+                input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(3, 102, 214, 0.15); }
+                button { background-color: var(--primary); color: white; border: none; padding: 15px; width: 100%; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; transition: 0.2s; }
+                button:hover { background-color: var(--primary-hover); }
+                .link-bottom { display: block; margin-top: 20px; color: #586069; text-decoration: none; font-weight: 500; }
+                .link-bottom:hover { text-decoration: underline; }
+            </style>
+        </head>
+        <body>
+            <div class="card">
+                <h2 style="margin-bottom: 10px;">Nova Conta</h2>
+                <p style="color: #586069; font-size: 14px; margin-bottom: 20px;">Crie seu espaço isolado para gerenciar suas turmas.</p>
+                ${erroMsg}
+                <form action="/cadastrar" method="POST">
+                    <input type="text" name="novoUsuario" placeholder="Escolha um Usuário (sem espaços)" required autocomplete="off" pattern="[a-zA-Z0-9_]+">
+                    <input type="password" name="novaSenha" placeholder="Crie uma Senha" required>
+                    <hr style="border: 0; border-top: 1px solid var(--border-color); margin: 20px 0;">
+                    <input type="password" name="masterKey" placeholder="Código de Convite" required>
+                    <button type="submit">Cadastrar Professor</button>
+                </form>
+                <a href="/login" class="link-bottom">⬅ Voltar ao Login</a>
+            </div>
+        </body>
+        </html>
+    `);
+});
+
+app.post('/cadastrar', (req, res) => {
+    const { novoUsuario, novaSenha, masterKey } = req.body;
+    
+    if (masterKey !== MASTER_KEY) {
+        return res.redirect('/cadastrar?erro=chave');
+    }
+
+    // Limpa o nome de usuário (remove espaços e caracteres especiais)
+    const usuarioLimpo = novoUsuario.replace(/[^a-zA-Z0-9_]/g, '').toLowerCase();
+    const usuarios = getUsuarios();
+
+    if (usuarios[usuarioLimpo]) {
+        return res.redirect('/cadastrar?erro=existe');
+    }
+
+    usuarios[usuarioLimpo] = novaSenha;
+    fs.writeFileSync(ARQUIVO_USUARIOS, JSON.stringify(usuarios, null, 2));
+    
+    // Cria a pasta do professor imediatamente
+    const dir = path.join(DIRETORIO_DADOS, usuarioLimpo);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+
+    res.redirect('/login?sucesso=1');
+});
+
+
 // ===================================
-// FUNÇÃO DE REGISTRO EXCEL
+// FUNÇÃO CENTRAL DO EXCEL (Atualizada para usar a pasta do prof)
 // ===================================
-async function registrarPresenca(nomeAluno, dataChamada, disciplina) {
+async function registrarPresenca(nomeAluno, dataChamada, disciplina, prof) {
     while (estaSalvando) {
         await new Promise(resolve => setTimeout(resolve, 500));
     }
@@ -112,7 +219,12 @@ async function registrarPresenca(nomeAluno, dataChamada, disciplina) {
         estaSalvando = true;
         
         const discFormatada = disciplina.replace(/[^a-zA-Z0-9]/g, '_');
-        const nomeArquivo = path.join(DIRETORIO_DADOS, `presenca_${discFormatada}_${dataChamada}.xlsx`);
+        
+        // Agora salva dentro da pasta específica do professor!
+        const dir = path.join(DIRETORIO_DADOS, prof);
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        
+        const nomeArquivo = path.join(dir, `presenca_${discFormatada}_${dataChamada}.xlsx`);
         const workbook = new ExcelJS.Workbook();
 
         if (fs.existsSync(nomeArquivo)) {
@@ -148,9 +260,7 @@ async function registrarPresenca(nomeAluno, dataChamada, disciplina) {
             }
         });
 
-        if (jaRegistrado) {
-            throw new Error('ALUNO_DUPLICADO'); 
-        }
+        if (jaRegistrado) throw new Error('ALUNO_DUPLICADO'); 
 
         if (!encontrou) {
             worksheet.addRow([
@@ -161,7 +271,7 @@ async function registrarPresenca(nomeAluno, dataChamada, disciplina) {
         }
 
         await workbook.xlsx.writeFile(nomeArquivo);
-        console.log(`✅ Presença de ${nomeAluno} salva em ${disciplina} no dia ${dataChamada}.`);
+        console.log(`✅ Presença salva para ${prof} em ${disciplina} (${dataChamada}).`);
 
     } catch (error) {
         throw error; 
@@ -170,14 +280,14 @@ async function registrarPresenca(nomeAluno, dataChamada, disciplina) {
     }
 }
 
+
 // ===================================
-// ROTAS DO PROFESSOR (PROTEGIDAS PELA FUNÇÃO checkAuth)
+// ROTAS DO PAINEL DO PROFESSOR (Requerem Login)
 // ===================================
 
-// ROTA 1: PAINEL INICIAL
 app.get('/', checkAuth, (req, res) => {
     const hoje = new Date().toISOString().split('T')[0]; 
-    const turmas = getTurmas();
+    const turmas = getTurmas(req.usuario); // Pega as turmas SÓ do professor logado
     const nomesTurmas = Object.keys(turmas);
     
     let opcoesTurmasHtml = '';
@@ -190,7 +300,11 @@ app.get('/', checkAuth, (req, res) => {
     }
 
     let arquivosHtml = '';
-    const arquivos = fs.readdirSync(DIRETORIO_DADOS).filter(file => file.endsWith('.xlsx'));
+    const profDir = path.join(DIRETORIO_DADOS, req.usuario);
+    let arquivos = [];
+    if (fs.existsSync(profDir)) {
+        arquivos = fs.readdirSync(profDir).filter(file => file.endsWith('.xlsx'));
+    }
     arquivos.reverse(); 
 
     if (arquivos.length === 0) {
@@ -227,7 +341,7 @@ app.get('/', checkAuth, (req, res) => {
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Chamada Digital - IFMA</title>
+            <title>Painel - Prof. ${req.usuario}</title>
             <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
             <style>
                 :root { --primary: #2ea44f; --primary-hover: #22863a; --bg-color: #f6f8fa; --card-bg: #ffffff; --text-dark: #24292e; --text-muted: #586069; --border-color: #e1e4e8; --blue: #0366d6; --blue-hover: #005cc5;}
@@ -236,7 +350,7 @@ app.get('/', checkAuth, (req, res) => {
                 .card { background: var(--card-bg); padding: 40px; border-radius: 16px; box-shadow: 0 12px 28px rgba(0,0,0,0.05); width: 100%; max-width: 480px; position: relative;}
                 .header { text-align: center; margin-bottom: 30px; }
                 .logo-ifma { width: 100px; height: auto; margin-bottom: 15px; }
-                .header h1 { font-size: 24px; font-weight: 700; margin-bottom: 8px; color: var(--text-dark); }
+                .header h1 { font-size: 22px; font-weight: 700; margin-bottom: 8px; color: var(--text-dark); }
                 .input-group { margin-bottom: 20px; text-align: left; }
                 label { display: block; margin-bottom: 8px; font-weight: 600; font-size: 14px; color: var(--text-dark); }
                 input[type="date"], select { width: 100%; padding: 12px 16px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 15px; font-family: 'Inter', sans-serif; transition: all 0.2s; background-color: #fafbfc; }
@@ -265,8 +379,8 @@ app.get('/', checkAuth, (req, res) => {
                 <a href="/logout" class="btn-logout" title="Sair do sistema">Sair 🚪</a>
                 <div class="header">
                     <img src="/logo-ifma.png" alt="Logo IFMA" class="logo-ifma" onerror="this.style.display='none'">
-                    <h1>Chamada Digital</h1>
-                    <p style="font-size: 14px; margin-top: 5px;">Sistema de presenças do professor</p>
+                    <h1>Painel do Professor</h1>
+                    <p style="font-size: 14px; margin-top: 5px; color: var(--primary); font-weight: bold;">@${req.usuario}</p>
                 </div>
                 
                 <form action="/qr-turma" method="POST">
@@ -292,7 +406,7 @@ app.get('/', checkAuth, (req, res) => {
                 </a>
 
                 <div class="history-section">
-                    <h3>📋 Relatórios de Presença</h3>
+                    <h3>📋 Seus Relatórios de Presença</h3>
                     <div class="file-list">
                         ${arquivosHtml}
                     </div>
@@ -303,15 +417,17 @@ app.get('/', checkAuth, (req, res) => {
     `);
 });
 
-// GERA O QR CODE
+// GERA O QR CODE (Enviando o nome do professor embutido!)
 app.post('/qr-turma', checkAuth, async (req, res) => {
     try {
         const dataAula = req.body.data;
         const disciplina = req.body.disciplina; 
-        const turmas = getTurmas();
+        const prof = req.usuario; // Pega o professor atual
+        
+        const turmas = getTurmas(prof);
         const alunosDaTurma = turmas[disciplina] || [];
         const discFormatada = disciplina.replace(/[^a-zA-Z0-9]/g, '_');
-        const nomeArquivo = path.join(DIRETORIO_DADOS, `presenca_${discFormatada}_${dataAula}.xlsx`);
+        const nomeArquivo = path.join(DIRETORIO_DADOS, prof, `presenca_${discFormatada}_${dataAula}.xlsx`);
 
         if (!fs.existsSync(nomeArquivo)) {
             const workbook = new ExcelJS.Workbook();
@@ -330,7 +446,8 @@ app.post('/qr-turma', checkAuth, async (req, res) => {
             await workbook.xlsx.writeFile(nomeArquivo);
         }
 
-        const urlFormulario = `${DOMINIO_PUBLICO}/chamada?data=${dataAula}&disciplina=${encodeURIComponent(disciplina)}`;
+        // A URL AGORA LEVA A TAG "?prof=usuario_do_professor"
+        const urlFormulario = `${DOMINIO_PUBLICO}/chamada?prof=${encodeURIComponent(prof)}&data=${dataAula}&disciplina=${encodeURIComponent(disciplina)}`;
         const qrImage = await QRCode.toDataURL(urlFormulario);
         
         const [ano, mes, dia] = dataAula.split('-');
@@ -352,9 +469,11 @@ app.post('/qr-turma', checkAuth, async (req, res) => {
     }
 });
 
+
 // PÁGINA PARA GERENCIAR TURMAS
 app.get('/turmas', checkAuth, (req, res) => {
-    const turmas = getTurmas();
+    const prof = req.usuario;
+    const turmas = getTurmas(prof);
     const nomesTurmas = Object.keys(turmas);
     
     let turmasHtml = '';
@@ -375,14 +494,14 @@ app.get('/turmas', checkAuth, (req, res) => {
                         <div style="display: flex; gap: 10px;">
                             <button onclick="toggleEdit('${nome}')" class="btn-action" style="border: none; background: #eaf5ff; padding: 8px 12px; border-radius: 6px; color: #0366d6; cursor: pointer; font-size: 14px; font-weight: 600;">✏️ Editar</button>
                             <form action="/turmas/excluir/${encodeURIComponent(nome)}" method="POST" style="margin: 0;">
-                                <button type="submit" class="btn-delete" title="Excluir Turma" onclick="return confirm('Excluir a turma ${nome}? Todas as planilhas futuras não terão mais a lista de alunos.')" style="border: 1px solid var(--border-color); border-radius: 6px; background: transparent; cursor: pointer; padding: 8px 12px;">🗑️</button>
+                                <button type="submit" class="btn-delete" title="Excluir Turma" onclick="return confirm('Excluir a turma ${nome}?')" style="border: 1px solid var(--border-color); border-radius: 6px; background: transparent; cursor: pointer; padding: 8px 12px;">🗑️</button>
                             </form>
                         </div>
                     </div>
                     
                     <div id="edit-${nome}" style="display: none; border-top: 1px solid var(--border-color); padding-top: 15px; margin-top: 5px;">
                         <form action="/turmas/editar/${encodeURIComponent(nome)}" method="POST">
-                            <label style="font-size: 13px; font-weight: bold; display:block; margin-bottom:5px;">Lista de Alunos Atualizada:</label>
+                            <label style="font-size: 13px; font-weight: bold; display:block; margin-bottom:5px;">Lista de Alunos:</label>
                             <textarea name="listaAlunos" rows="6" style="width: 100%; padding: 10px; margin-bottom: 10px; border-radius: 6px; border: 1px solid var(--border-color);" required>${listaAlunosTexto}</textarea>
                             <div style="display: flex; gap: 10px;">
                                 <button type="submit" style="background: var(--primary); color: white; border: none; padding: 10px 15px; border-radius: 6px; cursor: pointer; font-weight: bold;">💾 Salvar</button>
@@ -400,19 +519,18 @@ app.get('/turmas', checkAuth, (req, res) => {
         <html lang="pt-BR">
         <head>
             <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>Gerenciar Turmas</title>
             <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
             <style>
                 :root { --primary: #2ea44f; --bg-color: #f6f8fa; --card-bg: #ffffff; --text-dark: #24292e; --text-muted: #586069; --border-color: #e1e4e8; }
-                * { box-sizing: border-box; margin: 0; padding: 0; }
-                body { font-family: 'Inter', sans-serif; background-color: var(--bg-color); color: var(--text-dark); display: flex; justify-content: center; align-items: flex-start; min-height: 100vh; padding: 20px; }
+                * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif;}
+                body { background-color: var(--bg-color); color: var(--text-dark); display: flex; justify-content: center; align-items: flex-start; min-height: 100vh; padding: 20px; }
                 .card { background: var(--card-bg); padding: 40px; border-radius: 16px; box-shadow: 0 12px 28px rgba(0,0,0,0.05); width: 100%; max-width: 600px; margin-top: 20px;}
                 .header { text-align: center; margin-bottom: 30px; }
                 .header h1 { font-size: 24px; font-weight: 700; margin-bottom: 8px;}
                 .input-group { margin-bottom: 20px; text-align: left; }
                 label { display: block; margin-bottom: 8px; font-weight: 600; font-size: 14px; }
-                input[type="text"], textarea { width: 100%; padding: 12px 16px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 15px; font-family: 'Inter', sans-serif; resize: vertical;}
+                input[type="text"], textarea { width: 100%; padding: 12px 16px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 15px; resize: vertical;}
                 .btn { display: flex; justify-content: center; gap: 8px; width: 100%; background-color: var(--primary); color: white; padding: 14px; border: none; font-size: 16px; font-weight: 600; border-radius: 8px; cursor: pointer; margin-bottom: 20px; transition: 0.2s;}
                 .btn:hover { opacity: 0.9; }
                 .history-section { border-top: 1px solid var(--border-color); padding-top: 25px; }
@@ -421,19 +539,14 @@ app.get('/turmas', checkAuth, (req, res) => {
             <script>
                 function toggleEdit(nome) {
                     const el = document.getElementById('edit-' + nome);
-                    if (el.style.display === 'none') {
-                        el.style.display = 'block';
-                    } else {
-                        el.style.display = 'none';
-                    }
+                    el.style.display = (el.style.display === 'none') ? 'block' : 'none';
                 }
             </script>
         </head>
         <body>
             <div class="card">
                 <div class="header">
-                    <h1>⚙️ Gerenciar Turmas</h1>
-                    <p style="color: var(--text-muted); font-size: 14px;">Cadastre uma nova turma ou edite as existentes.</p>
+                    <h1>⚙️ Gerenciar Minhas Turmas</h1>
                 </div>
                 
                 <form action="/turmas/adicionar" method="POST" style="background: #fafbfc; padding: 20px; border-radius: 12px; border: 1px dashed var(--border-color); margin-bottom: 30px;">
@@ -444,19 +557,18 @@ app.get('/turmas', checkAuth, (req, res) => {
                     </div>
                     <div class="input-group">
                         <label for="listaAlunos">Lista de Alunos</label>
-                        <p style="font-size: 12px; color: #666; margin-top: -5px; margin-bottom: 8px;">Cole o nome dos alunos (um por linha).</p>
                         <textarea id="listaAlunos" name="listaAlunos" rows="4" placeholder="Ana Silva&#10;Bruno Costa..." required></textarea>
                     </div>
                     <button type="submit" class="btn" style="margin-bottom: 0;">➕ Cadastrar Turma</button>
                 </form>
 
                 <div class="history-section">
-                    <h3>👥 Suas Turmas</h3>
+                    <h3>👥 Suas Turmas Cadastradas</h3>
                     <div>${turmasHtml}</div>
                 </div>
 
                 <div style="text-align: center; margin-top: 30px;">
-                    <a href="/" style="text-decoration: none; color: #0366d6; font-weight: 600;">⬅ Voltar ao Painel Principal</a>
+                    <a href="/" style="text-decoration: none; color: #0366d6; font-weight: 600;">⬅ Voltar ao Painel</a>
                 </div>
             </div>
         </body>
@@ -465,45 +577,54 @@ app.get('/turmas', checkAuth, (req, res) => {
 });
 
 app.post('/turmas/adicionar', checkAuth, (req, res) => {
+    const prof = req.usuario;
     const nomeTurma = req.body.nomeTurma.trim();
     const listaAlunosRaw = req.body.listaAlunos || '';
     const alunos = listaAlunosRaw.split('\n').map(a => a.trim()).filter(a => a.length > 0);
     
     if (nomeTurma && alunos.length > 0) {
-        const turmas = getTurmas();
+        const turmas = getTurmas(prof);
         turmas[nomeTurma] = alunos; 
-        salvarTurmas(turmas);
+        salvarTurmas(prof, turmas);
     }
     res.redirect('/turmas');
 });
 
 app.post('/turmas/editar/:nome', checkAuth, (req, res) => {
+    const prof = req.usuario;
     const nomeTurma = req.params.nome;
     const listaAlunosRaw = req.body.listaAlunos || '';
     const alunos = listaAlunosRaw.split('\n').map(a => a.trim()).filter(a => a.length > 0);
-    const turmas = getTurmas();
+    
+    const turmas = getTurmas(prof);
     if (turmas[nomeTurma] && alunos.length > 0) {
         turmas[nomeTurma] = alunos;
-        salvarTurmas(turmas);
+        salvarTurmas(prof, turmas);
     }
     res.redirect('/turmas');
 });
 
 app.post('/turmas/excluir/:nome', checkAuth, (req, res) => {
+    const prof = req.usuario;
     const nomeTurma = req.params.nome;
-    const turmas = getTurmas();
+    const turmas = getTurmas(prof);
     if (turmas[nomeTurma]) {
         delete turmas[nomeTurma];
-        salvarTurmas(turmas);
+        salvarTurmas(prof, turmas);
     }
     res.redirect('/turmas');
 });
 
-// VISUALIZAÇÃO E EDIÇÃO NA WEB DA CHAMADA
+
+// ===================================
+// VISUALIZAÇÃO DE PLANILHAS (Seguro por Professor)
+// ===================================
+
 app.get('/ver/:nomeDoArquivo', checkAuth, async (req, res) => {
     try {
+        const prof = req.usuario;
         const arquivoRequisitado = req.params.nomeDoArquivo;
-        const caminhoCompleto = path.join(DIRETORIO_DADOS, arquivoRequisitado);
+        const caminhoCompleto = path.join(DIRETORIO_DADOS, prof, arquivoRequisitado);
 
         if (!fs.existsSync(caminhoCompleto)) return res.status(404).send("Arquivo não encontrado.");
 
@@ -589,7 +710,6 @@ app.get('/ver/:nomeDoArquivo', checkAuth, async (req, res) => {
                         <div class="stat-box"><h3 style="color: #2ea44f;">${qtdPresentes}</h3><p>Presentes</p></div>
                         <div class="stat-box"><h3 style="color: #d73a49;">${qtdFaltas}</h3><p>Faltas</p></div>
                     </div>
-                    <p style="font-size: 13px; color: #666; margin-bottom: 10px;">💡 Dica: Clique no status de um aluno para alterar manualmente.</p>
                     <table>
                         <thead><tr><th>Aluno</th><th>Status</th><th>Hora</th></tr></thead>
                         <tbody>${linhasHtml}</tbody>
@@ -609,8 +729,9 @@ app.get('/ver/:nomeDoArquivo', checkAuth, async (req, res) => {
 
 app.post('/atualizar-status', checkAuth, async (req, res) => {
     try {
+        const prof = req.usuario;
         const { arquivo, aluno, status } = req.body;
-        const caminhoCompleto = path.join(DIRETORIO_DADOS, arquivo);
+        const caminhoCompleto = path.join(DIRETORIO_DADOS, prof, arquivo);
 
         while (estaSalvando) { await new Promise(resolve => setTimeout(resolve, 500)); }
         estaSalvando = true;
@@ -631,7 +752,6 @@ app.post('/atualizar-status', checkAuth, async (req, res) => {
         }
         estaSalvando = false;
         res.redirect(`/ver/${arquivo}`);
-
     } catch (error) {
         estaSalvando = false;
         res.status(500).send("Erro ao atualizar a presença.");
@@ -639,9 +759,10 @@ app.post('/atualizar-status', checkAuth, async (req, res) => {
 });
 
 app.get('/baixar/:nomeDoArquivo', checkAuth, (req, res) => {
+    const prof = req.usuario;
     const arquivoRequisitado = req.params.nomeDoArquivo;
     if (arquivoRequisitado.endsWith('.xlsx')) {
-        const caminhoCompleto = path.join(DIRETORIO_DADOS, arquivoRequisitado);
+        const caminhoCompleto = path.join(DIRETORIO_DADOS, prof, arquivoRequisitado);
         if (fs.existsSync(caminhoCompleto)) res.download(caminhoCompleto);
         else res.status(404).send('Arquivo não encontrado.');
     } else {
@@ -650,9 +771,10 @@ app.get('/baixar/:nomeDoArquivo', checkAuth, (req, res) => {
 });
 
 app.post('/excluir/:nomeDoArquivo', checkAuth, (req, res) => {
+    const prof = req.usuario;
     const arquivoRequisitado = req.params.nomeDoArquivo;
     if (arquivoRequisitado.endsWith('.xlsx') && !arquivoRequisitado.includes('..')) {
-        const caminhoCompleto = path.join(DIRETORIO_DADOS, arquivoRequisitado);
+        const caminhoCompleto = path.join(DIRETORIO_DADOS, prof, arquivoRequisitado);
         if (fs.existsSync(caminhoCompleto)) fs.unlinkSync(caminhoCompleto);
     }
     res.redirect('/');
@@ -667,9 +789,17 @@ app.get('/chamada', async (req, res) => {
     try {
         const dataAula = req.query.data;
         const disciplina = req.query.disciplina;
+        const prof = req.query.prof; // Pega o dono do QR Code
+        
+        // Segurança: Se alguém adulterar a URL e tentar acessar sem professor, barra.
+        const usuarios = getUsuarios();
+        if (!prof || !usuarios[prof]) {
+            return res.status(400).send("Link de chamada inválido.");
+        }
+
         const discFormatada = disciplina.replace(/[^a-zA-Z0-9]/g, '_');
-        const chaveTrava = `trava_${discFormatada}_${dataAula}`; 
-        const turmas = getTurmas();
+        const chaveTrava = `trava_${prof}_${discFormatada}_${dataAula}`; 
+        const turmas = getTurmas(prof);
         const alunosDaTurma = turmas[disciplina] || [];
 
         let optionsHtml = '<option value="" disabled selected>Selecione seu nome na lista...</option>';
@@ -707,6 +837,7 @@ app.get('/chamada', async (req, res) => {
                     <form action="/registrar" method="POST">
                         <input type="hidden" name="dataChamada" value="${dataAula}">
                         <input type="hidden" name="disciplina" value="${disciplina}">
+                        <input type="hidden" name="prof" value="${prof}">
                         ${inputHtml}
                         <button type="submit">Confirmar</button>
                     </form>
@@ -740,9 +871,10 @@ app.post('/registrar', async (req, res) => {
         const aluno = req.body.nomeAluno.trim();
         const dataAula = req.body.dataChamada;
         const disciplina = req.body.disciplina;
+        const prof = req.body.prof;
         
         const discFormatada = disciplina.replace(/[^a-zA-Z0-9]/g, '_');
-        const chaveTrava = `trava_${discFormatada}_${dataAula}`;
+        const chaveTrava = `trava_${prof}_${discFormatada}_${dataAula}`;
 
         if (req.headers.cookie && req.headers.cookie.includes(`${chaveTrava}=sim`)) {
             return res.send(`
@@ -754,7 +886,8 @@ app.post('/registrar', async (req, res) => {
             `);
         }
 
-        await registrarPresenca(aluno, dataAula, disciplina);
+        // Passa o nome do professor para a função salvar na pasta correta
+        await registrarPresenca(aluno, dataAula, disciplina, prof);
         
         res.setHeader('Set-Cookie', `${chaveTrava}=sim; Max-Age=36000; Path=/`);
         
