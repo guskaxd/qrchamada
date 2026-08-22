@@ -28,7 +28,7 @@ function salvarTurmas(turmas) {
     fs.writeFileSync(ARQUIVO_TURMAS, JSON.stringify(turmas, null, 2));
 }
 
-// 1. FUNÇÃO DE REGISTRO VIA QR CODE
+// 1. FUNÇÃO DE REGISTRO
 async function registrarPresenca(nomeAluno, dataChamada, disciplina) {
     while (estaSalvando) {
         await new Promise(resolve => setTimeout(resolve, 500));
@@ -118,7 +118,7 @@ app.get('/', (req, res) => {
     if (arquivos.length === 0) {
         arquivosHtml = `
             <div class="empty-state">
-                <span style="font-size: 24px;"></span>
+                <span style="font-size: 24px;">📭</span>
                 <p>Nenhuma chamada registrada ainda.</p>
             </div>`;
     } else {
@@ -128,7 +128,7 @@ app.get('/', (req, res) => {
                 <div class="file-item-container">
                     <a href="/ver/${arq}" class="file-link" title="Ver presença na web">
                         <div class="file-info">
-                            <span class="file-icon"></span>
+                            <span class="file-icon">📋</span>
                             <span class="file-name">${nomeExibicao}</span>
                         </div>
                     </a>
@@ -184,7 +184,7 @@ app.get('/', (req, res) => {
         <body>
             <div class="card">
                 <div class="header">
-                    <img src="/ifma.jpg" alt="Logo IFMA" class="logo-ifma" onerror="this.style.display='none'">
+                    <img src="/logo-ifma.png" alt="Logo IFMA" class="logo-ifma" onerror="this.style.display='none'">
                     <h1>Chamada Digital</h1>
                     <p style="font-size: 14px; margin-top: 5px;">Sistema de presenças do professor</p>
                 </div>
@@ -203,16 +203,16 @@ app.get('/', (req, res) => {
                     </div>
                     
                     <button type="submit" class="btn" ${nomesTurmas.length === 0 ? 'disabled style="opacity: 0.5;"' : ''}>
-                        <span></span> Gerar QR Code
+                        <span>📱</span> Gerar QR Code
                     </button>
                 </form>
                 
                 <a href="/turmas" class="btn btn-secondary" style="text-decoration: none;">
-                    <span></span> Gerenciar Turmas e Alunos
+                    <span>⚙️</span> Gerenciar Turmas e Alunos
                 </a>
 
                 <div class="history-section">
-                    <h3>Relatórios de Presença</h3>
+                    <h3>📋 Relatórios de Presença</h3>
                     <div class="file-list">
                         ${arquivosHtml}
                     </div>
@@ -255,7 +255,6 @@ app.get('/ver/:nomeDoArquivo', async (req, res) => {
                     qtdFaltas++;
                 }
 
-                // Transformamos a "badge" estática em um formulário interativo (dropdown)
                 const statusForm = `
                     <form action="/atualizar-status" method="POST" style="margin: 0;">
                         <input type="hidden" name="arquivo" value="${arquivoRequisitado}">
@@ -307,7 +306,6 @@ app.get('/ver/:nomeDoArquivo', async (req, res) => {
                     td { font-size: 15px; font-weight: 500; }
                     tr:hover { background-color: #fafdff; }
                     
-                    /* CSS para o dropdown interativo */
                     .select-status { padding: 6px 10px; border-radius: 20px; font-size: 13px; font-weight: 600; cursor: pointer; outline: none; text-align: center; font-family: 'Inter', sans-serif;}
                     .select-presente { background-color: #dcffe4; color: #1a7f37; border: 1px solid #a3ebba; }
                     .select-falta { background-color: #ffeef0; color: #d73a49; border: 1px solid #ffdce0; }
@@ -323,7 +321,7 @@ app.get('/ver/:nomeDoArquivo', async (req, res) => {
             <body>
                 <div class="container">
                     <div class="header">
-                        <h1>${nomeExibicao}</h1>
+                        <h1>📋 ${nomeExibicao}</h1>
                     </div>
 
                     <div class="stats">
@@ -340,6 +338,8 @@ app.get('/ver/:nomeDoArquivo', async (req, res) => {
                             <p>Faltas</p>
                         </div>
                     </div>
+                    
+                    <p style="font-size: 13px; color: #666; margin-bottom: 10px;">💡 Dica: Clique no status de um aluno para alterar manualmente.</p>
 
                     <table>
                         <thead>
@@ -368,13 +368,12 @@ app.get('/ver/:nomeDoArquivo', async (req, res) => {
     }
 });
 
-// NOVA ROTA: RECEBE A ALTERAÇÃO MANUAL DO PROFESSOR E SALVA NO EXCEL
+// RECEBE A ALTERAÇÃO MANUAL E SALVA
 app.post('/atualizar-status', async (req, res) => {
     try {
         const { arquivo, aluno, status } = req.body;
         const caminhoCompleto = path.join(DIRETORIO_DADOS, arquivo);
 
-        // Fila de segurança
         while (estaSalvando) {
             await new Promise(resolve => setTimeout(resolve, 500));
         }
@@ -387,9 +386,8 @@ app.post('/atualizar-status', async (req, res) => {
 
             worksheet.eachRow((row, rowNumber) => {
                 if (rowNumber > 1 && row.getCell(2).value === aluno) {
-                    row.getCell(3).value = status; // Atualiza Presente ou Falta
+                    row.getCell(3).value = status;
                     
-                    // Se mudou pra presente, coloca a hora atual. Se mudou pra falta, coloca um traço.
                     if (status === 'Presente') {
                         row.getCell(1).value = new Date().toLocaleString('pt-BR').split(' ')[1];
                     } else {
@@ -402,7 +400,6 @@ app.post('/atualizar-status', async (req, res) => {
         }
         
         estaSalvando = false;
-        // Recarrega a página automaticamente para mostrar a tabela e o contador atualizados
         res.redirect(`/ver/${arquivo}`);
 
     } catch (error) {
@@ -412,7 +409,7 @@ app.post('/atualizar-status', async (req, res) => {
     }
 });
 
-// PÁGINA PARA GERENCIAR TURMAS
+// PÁGINA PARA GERENCIAR TURMAS (COM BOTÃO EDITAR E FORMULÁRIO DE EDIÇÃO)
 app.get('/turmas', (req, res) => {
     const turmas = getTurmas();
     const nomesTurmas = Object.keys(turmas);
@@ -423,17 +420,38 @@ app.get('/turmas', (req, res) => {
     } else {
         nomesTurmas.forEach(nome => {
             const qtdAlunos = turmas[nome].length;
+            // Transforma o array de alunos em texto (linhas) para colocar dentro da textarea de edição
+            const listaAlunosTexto = turmas[nome].join('\n');
+            
             turmasHtml += `
-                <div class="file-item-container" style="margin-bottom: 10px;">
-                    <div class="file-link" style="cursor: default;">
+                <div class="file-item-container" style="margin-bottom: 15px; flex-direction: column; align-items: stretch; padding: 15px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
                         <div class="file-info">
                             <span class="file-icon">👥</span>
-                            <span class="file-name">${nome} <span style="color: #666; font-size: 12px;">(${qtdAlunos} alunos)</span></span>
+                            <span class="file-name" style="font-size: 16px;">${nome} <span style="color: #666; font-size: 12px; font-weight: 400;">(${qtdAlunos} alunos)</span></span>
+                        </div>
+                        <div style="display: flex; gap: 10px;">
+                            <!-- Botão de Editar -->
+                            <button type="button" onclick="toggleEdit('${nome}')" class="btn-action" style="border: none; background: #eaf5ff; padding: 8px 12px; border-radius: 6px; color: #0366d6; cursor: pointer; font-size: 14px; font-weight: 600;">✏️ Editar</button>
+                            
+                            <!-- Botão de Excluir -->
+                            <form action="/turmas/excluir/${encodeURIComponent(nome)}" method="POST" style="margin: 0;">
+                                <button type="submit" class="btn-delete" title="Excluir Turma" onclick="return confirm('Excluir a turma ${nome}? Todas as planilhas futuras não terão mais a lista de alunos.')" style="border: 1px solid var(--border-color); border-radius: 6px;">🗑️</button>
+                            </form>
                         </div>
                     </div>
-                    <form action="/turmas/excluir/${encodeURIComponent(nome)}" method="POST" style="margin: 0;">
-                        <button type="submit" class="btn-delete" title="Excluir Turma" onclick="return confirm('Excluir a turma ${nome}?')">🗑️</button>
-                    </form>
+                    
+                    <!-- Formulário de Edição (Oculto por padrão, aparece ao clicar em Editar) -->
+                    <div id="edit-${nome}" style="display: none; border-top: 1px solid var(--border-color); padding-top: 15px; margin-top: 5px;">
+                        <form action="/turmas/editar/${encodeURIComponent(nome)}" method="POST">
+                            <label style="font-size: 13px;">Lista de Alunos Atualizada:</label>
+                            <textarea name="listaAlunos" rows="6" style="margin-bottom: 10px;" required>${listaAlunosTexto}</textarea>
+                            <div style="display: flex; gap: 10px;">
+                                <button type="submit" class="btn" style="margin-bottom: 0; padding: 10px;">💾 Salvar Alterações</button>
+                                <button type="button" class="btn" onclick="toggleEdit('${nome}')" style="margin-bottom: 0; padding: 10px; background-color: #e1e4e8; color: #24292e;">Cancelar</button>
+                            </div>
+                        </form>
+                    </div>
                 </div>
             `;
         });
@@ -450,50 +468,62 @@ app.get('/turmas', (req, res) => {
             <style>
                 :root { --primary: #2ea44f; --bg-color: #f6f8fa; --card-bg: #ffffff; --text-dark: #24292e; --text-muted: #586069; --border-color: #e1e4e8; }
                 * { box-sizing: border-box; margin: 0; padding: 0; }
-                body { font-family: 'Inter', sans-serif; background-color: var(--bg-color); color: var(--text-dark); display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 20px; }
-                .card { background: var(--card-bg); padding: 40px; border-radius: 16px; box-shadow: 0 12px 28px rgba(0,0,0,0.05); width: 100%; max-width: 480px; }
+                body { font-family: 'Inter', sans-serif; background-color: var(--bg-color); color: var(--text-dark); display: flex; justify-content: center; align-items: flex-start; min-height: 100vh; padding: 20px; }
+                .card { background: var(--card-bg); padding: 40px; border-radius: 16px; box-shadow: 0 12px 28px rgba(0,0,0,0.05); width: 100%; max-width: 600px; margin-top: 20px;}
                 .header { text-align: center; margin-bottom: 30px; }
                 .header h1 { font-size: 24px; font-weight: 700; margin-bottom: 8px;}
                 .input-group { margin-bottom: 20px; text-align: left; }
                 label { display: block; margin-bottom: 8px; font-weight: 600; font-size: 14px; }
-                input[type="text"], textarea { width: 100%; padding: 12px 16px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 15px; font-family: 'Inter', sans-serif; }
-                .btn { display: flex; justify-content: center; gap: 8px; width: 100%; background-color: var(--primary); color: white; padding: 14px; border: none; font-size: 16px; font-weight: 600; border-radius: 8px; cursor: pointer; margin-bottom: 20px; }
+                input[type="text"], textarea { width: 100%; padding: 12px 16px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 15px; font-family: 'Inter', sans-serif; resize: vertical;}
+                .btn { display: flex; justify-content: center; gap: 8px; width: 100%; background-color: var(--primary); color: white; padding: 14px; border: none; font-size: 16px; font-weight: 600; border-radius: 8px; cursor: pointer; margin-bottom: 20px; transition: 0.2s;}
+                .btn:hover { opacity: 0.9; }
                 .history-section { border-top: 1px solid var(--border-color); padding-top: 25px; }
                 .history-section h3 { font-size: 16px; font-weight: 600; margin-bottom: 15px; }
-                .file-item-container { display: flex; align-items: center; background-color: #fff; border: 1px solid var(--border-color); border-radius: 8px; }
-                .file-link { flex: 1; display: flex; padding: 12px 16px; color: var(--text-dark); }
-                .file-info { display: flex; align-items: center; gap: 10px; font-weight: 500; font-size: 14px;}
-                .btn-delete { background: none; border: none; padding: 12px 16px; cursor: pointer; border-left: 1px solid var(--border-color); font-size: 16px; border-radius: 0 8px 8px 0; }
+                .file-item-container { background-color: #fff; border: 1px solid var(--border-color); border-radius: 8px; }
+                .file-info { display: flex; align-items: center; gap: 10px; font-weight: 600;}
+                .btn-delete { background: none; padding: 8px 12px; cursor: pointer; font-size: 16px; transition: 0.2s; }
                 .btn-delete:hover { background-color: #ffeef0; }
             </style>
+            <!-- Script para exibir/esconder a aba de Edição de Turma -->
+            <script>
+                function toggleEdit(nome) {
+                    const el = document.getElementById('edit-' + nome);
+                    if (el.style.display === 'none') {
+                        el.style.display = 'block';
+                    } else {
+                        el.style.display = 'none';
+                    }
+                }
+            </script>
         </head>
         <body>
             <div class="card">
                 <div class="header">
-                    <h1> Gerenciar Turmas</h1>
-                    <p style="color: var(--text-muted); font-size: 14px;">Cadastre uma nova turma e cole a lista de alunos correspondente.</p>
+                    <h1>⚙️ Gerenciar Turmas</h1>
+                    <p style="color: var(--text-muted); font-size: 14px;">Cadastre uma nova turma ou edite as existentes.</p>
                 </div>
                 
-                <form action="/turmas/adicionar" method="POST">
+                <form action="/turmas/adicionar" method="POST" style="background: #fafbfc; padding: 20px; border-radius: 12px; border: 1px dashed var(--border-color); margin-bottom: 30px;">
+                    <h3 style="margin-bottom: 15px; font-size: 16px;">Nova Turma</h3>
                     <div class="input-group">
-                        <label for="nomeTurma">Nome da Turma / Disciplina</label>
+                        <label for="nomeTurma">Nome da Disciplina / Turma</label>
                         <input type="text" id="nomeTurma" name="nomeTurma" placeholder="Ex: Informática 2" required autocomplete="off">
                     </div>
                     <div class="input-group">
                         <label for="listaAlunos">Lista de Alunos</label>
                         <p style="font-size: 12px; color: #666; margin-top: -5px; margin-bottom: 8px;">Cole o nome dos alunos (um por linha).</p>
-                        <textarea id="listaAlunos" name="listaAlunos" rows="6" placeholder="Ex:&#10;Ana Silva&#10;Bruno Costa..." required></textarea>
+                        <textarea id="listaAlunos" name="listaAlunos" rows="4" placeholder="Ana Silva&#10;Bruno Costa..." required></textarea>
                     </div>
-                    <button type="submit" class="btn">➕ Salvar Turma</button>
+                    <button type="submit" class="btn" style="margin-bottom: 0;">➕ Cadastrar Turma</button>
                 </form>
 
                 <div class="history-section">
-                    <h3>👥 Turmas Cadastradas</h3>
+                    <h3>👥 Suas Turmas</h3>
                     <div>${turmasHtml}</div>
                 </div>
 
-                <div style="text-align: center; margin-top: 20px;">
-                    <a href="/" style="text-decoration: none; color: #0366d6; font-weight: 600;">⬅ Voltar ao Painel</a>
+                <div style="text-align: center; margin-top: 30px;">
+                    <a href="/" style="text-decoration: none; color: #0366d6; font-weight: 600;">⬅ Voltar ao Painel Principal</a>
                 </div>
             </div>
         </body>
@@ -501,6 +531,7 @@ app.get('/turmas', (req, res) => {
     `);
 });
 
+// ROTA: SALVA NOVA TURMA
 app.post('/turmas/adicionar', (req, res) => {
     const nomeTurma = req.body.nomeTurma.trim();
     const listaAlunosRaw = req.body.listaAlunos || '';
@@ -514,6 +545,26 @@ app.post('/turmas/adicionar', (req, res) => {
     res.redirect('/turmas');
 });
 
+// NOVA ROTA: SALVA EDIÇÃO DE UMA TURMA EXISTENTE
+app.post('/turmas/editar/:nome', (req, res) => {
+    const nomeTurma = req.params.nome;
+    const listaAlunosRaw = req.body.listaAlunos || '';
+    
+    // Transforma o texto do textarea num array limpo e tira as linhas vazias
+    const alunos = listaAlunosRaw.split('\n').map(a => a.trim()).filter(a => a.length > 0);
+    
+    const turmas = getTurmas();
+    
+    // Se a turma existir e a lista não estiver vazia, ele salva a edição no arquivo JSON
+    if (turmas[nomeTurma] && alunos.length > 0) {
+        turmas[nomeTurma] = alunos;
+        salvarTurmas(turmas);
+    }
+    
+    res.redirect('/turmas');
+});
+
+// ROTA: EXCLUIR TURMA
 app.post('/turmas/excluir/:nome', (req, res) => {
     const nomeTurma = req.params.nome;
     const turmas = getTurmas();
@@ -523,6 +574,7 @@ app.post('/turmas/excluir/:nome', (req, res) => {
     }
     res.redirect('/turmas');
 });
+
 
 // GERA O QR CODE E CRIA PLANILHA
 app.post('/qr-turma', async (req, res) => {
@@ -648,7 +700,6 @@ app.get('/chamada', async (req, res) => {
     }
 });
 
-// SALVA O FORMULÁRIO DO ALUNO
 app.post('/registrar', async (req, res) => {
     try {
         const aluno = req.body.nomeAluno.trim();
@@ -700,7 +751,6 @@ app.post('/registrar', async (req, res) => {
     }
 });
 
-// DOWNLOAD DA PLANILHA
 app.get('/baixar/:nomeDoArquivo', (req, res) => {
     const arquivoRequisitado = req.params.nomeDoArquivo;
     if (arquivoRequisitado.endsWith('.xlsx')) {
@@ -715,7 +765,6 @@ app.get('/baixar/:nomeDoArquivo', (req, res) => {
     }
 });
 
-// EXCLUIR PLANILHA
 app.post('/excluir/:nomeDoArquivo', (req, res) => {
     const arquivoRequisitado = req.params.nomeDoArquivo;
     if (arquivoRequisitado.endsWith('.xlsx') && !arquivoRequisitado.includes('..')) {
