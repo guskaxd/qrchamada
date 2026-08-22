@@ -33,7 +33,7 @@ function salvarTurmas(turmas) {
 
 // === MIDDLEWARE DE AUTENTICAÇÃO ===
 // Essa função verifica se o navegador tem o "passe livre" do professor
-function checarAutenticacao(req, res, next) {
+function checkAuth(req, res, next) {
     if (req.headers.cookie && req.headers.cookie.includes('admin_token=logado')) {
         next(); // Pode passar!
     } else {
