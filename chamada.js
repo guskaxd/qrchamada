@@ -15,7 +15,7 @@ const DOMINIO_PUBLICO = 'https://qrchamada-production.up.railway.app';
 // ==========================================
 // CONFIGURAÇÕES DO SISTEMA MULTI-PROFESSORES
 // ==========================================
-const MASTER_KEY = process.env.MASTER_KEY || '123456'; // Código necessário para cadastrar um novo professor
+const MASTER_KEY = process.env.MASTER_KEY || 'ifadmin'; // Código necessário para cadastrar um novo professor
 const ARQUIVO_USUARIOS = path.join(DIRETORIO_DADOS, 'usuarios.json');
 
 let estaSalvando = false;
@@ -28,7 +28,7 @@ if (!fs.existsSync(DIRETORIO_DADOS)) {
 function getUsuarios() {
     if (!fs.existsSync(ARQUIVO_USUARIOS)) {
         // Se não existir, cria o usuário admin padrão
-        const defaultUsers = { "admin": "123456" };
+        const defaultUsers = { "admin": "ifadmin" };
         fs.writeFileSync(ARQUIVO_USUARIOS, JSON.stringify(defaultUsers, null, 2));
         return defaultUsers;
     }
@@ -103,7 +103,7 @@ app.get('/login', (req, res) => {
         </head>
         <body>
             <div class="card">
-                <img src="/logo-ifma.png" alt="Logo IFMA" class="logo-ifma" onerror="this.style.display='none'">
+                <img src="/ifma.jpg" alt="Logo IFMA" class="logo-ifma" onerror="this.style.display='none'">
                 <h2 style="margin-bottom: 20px;">Acesso do Professor</h2>
                 ${erroMsg}
                 ${sucessoMsg}
@@ -310,7 +310,7 @@ app.get('/', checkAuth, (req, res) => {
     if (arquivos.length === 0) {
         arquivosHtml = `
             <div class="empty-state">
-                <span style="font-size: 24px;">📭</span>
+                <span style="font-size: 24px;"></span>
                 <p>Nenhuma chamada registrada ainda.</p>
             </div>`;
     } else {
@@ -320,7 +320,7 @@ app.get('/', checkAuth, (req, res) => {
                 <div class="file-item-container">
                     <a href="/ver/${arq}" class="file-link" title="Ver presença na web">
                         <div class="file-info">
-                            <span class="file-icon">📋</span>
+                            <span class="file-icon">8</span>
                             <span class="file-name">${nomeExibicao}</span>
                         </div>
                     </a>
@@ -376,9 +376,9 @@ app.get('/', checkAuth, (req, res) => {
         </head>
         <body>
             <div class="card">
-                <a href="/logout" class="btn-logout" title="Sair do sistema">Sair 🚪</a>
+                <a href="/logout" class="btn-logout" title="Sair do sistema">Sair</a>
                 <div class="header">
-                    <img src="/logo-ifma.png" alt="Logo IFMA" class="logo-ifma" onerror="this.style.display='none'">
+                    <img src="/ifma.jpg" alt="Logo IFMA" class="logo-ifma" onerror="this.style.display='none'">
                     <h1>Painel do Professor</h1>
                     <p style="font-size: 14px; margin-top: 5px; color: var(--primary); font-weight: bold;">@${req.usuario}</p>
                 </div>
@@ -397,16 +397,16 @@ app.get('/', checkAuth, (req, res) => {
                     </div>
                     
                     <button type="submit" class="btn" ${nomesTurmas.length === 0 ? 'disabled style="opacity: 0.5;"' : ''}>
-                        <span>📱</span> Gerar QR Code
+                        <span></span> Gerar QR Code
                     </button>
                 </form>
                 
                 <a href="/turmas" class="btn btn-secondary" style="text-decoration: none;">
-                    <span>⚙️</span> Gerenciar Turmas e Alunos
+                    <span></span> Gerenciar Turmas e Alunos
                 </a>
 
                 <div class="history-section">
-                    <h3>📋 Seus Relatórios de Presença</h3>
+                    <h3>Seus Relatórios de Presença</h3>
                     <div class="file-list">
                         ${arquivosHtml}
                     </div>
