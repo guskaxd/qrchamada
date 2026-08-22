@@ -181,22 +181,79 @@ app.get('/cadastrar', (req, res) => {
     `);
 });
 
-// ROTA SECRETA: VER TODOS OS PROFESSORES CADASTRADOS
+// ROTA SECRETA: VER E EDITAR PROFESSORES
 app.get('/painel-mestre', (req, res) => {
-    // Verifica se a chave passada na URL é a mesma MASTER_KEY do sistema
     if (req.query.chave === MASTER_KEY) {
         const usuarios = getUsuarios();
         
-        let html = '<h2 style="font-family: sans-serif;">Lista de Professores</h2>';
-        html += '<table border="1" cellpadding="10" style="border-collapse: collapse; font-family: sans-serif;">';
-        html += '<tr><th>Usuário</th><th>Senha</th></tr>';
-        
+        let linhasHtml = '';
         for (const [user, password] of Object.entries(usuarios)) {
-            html += `<tr><td>${user}</td><td>${password}</td></tr>`;
+            linhasHtml += `
+                <div style="background: white; padding: 15px; margin-bottom: 10px; border-radius: 8px; border: 1px solid #e1e4e8; display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <span style="font-size: 18px; margin-right: 10px;">👤</span>
+                        <strong>Usuário:</strong> <span style="color: #0366d6;">${user}</span> <br>
+                        <span style="color: #666; font-size: 14px; margin-left: 33px;"><strong>Senha:</strong> ${password}</span>
+                    </div>
+                    <button onclick="toggleEdit('${user}')" style="background: #eaf5ff; color: #0366d6; border: none; padding: 8px 12px; border-radius: 6px; cursor: pointer; font-weight: bold; transition: 0.2s;">✏️ Editar</button>
+                </div>
+
+                <!-- Formulário de Edição Oculto -->
+                <div id="edit-${user}" style="display: none; background: #fafbfc; padding: 15px; margin-bottom: 15px; border-radius: 8px; border: 1px dashed #ccc;">
+                    <form action="/painel-mestre/editar" method="POST" style="margin: 0; display: flex; flex-direction: column; gap: 10px;">
+                        <input type="hidden" name="chave" value="${MASTER_KEY}">
+                        <input type="hidden" name="oldUsuario" value="${user}">
+                        
+                        <label style="font-size: 14px; font-weight: bold; color: #24292e;">Novo Nome de Usuário (sem espaços):</label>
+                        <input type="text" name="newUsuario" value="${user}" required style="padding: 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px;">
+                        
+                        <label style="font-size: 14px; font-weight: bold; color: #24292e;">Nova Senha:</label>
+                        <input type="text" name="novaSenha" value="${password}" required style="padding: 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px;">
+                        
+                        <div style="display: flex; gap: 10px; margin-top: 5px;">
+                            <button type="submit" style="background: #2ea44f; color: white; border: none; padding: 10px 15px; border-radius: 6px; cursor: pointer; font-weight: bold;">💾 Salvar Alterações</button>
+                            <button type="button" onclick="toggleEdit('${user}')" style="background: #e1e4e8; color: #24292e; border: none; padding: 10px 15px; border-radius: 6px; cursor: pointer; font-weight: bold;">Cancelar</button>
+                        </div>
+                    </form>
+                </div>
+            `;
         }
-        
-        html += '</table>';
-        res.send(html);
+
+        res.send(`
+            <!DOCTYPE html>
+            <html lang="pt-BR">
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>Painel Mestre</title>
+                <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+                <style>
+                    body { font-family: 'Inter', sans-serif; background-color: #f6f8fa; padding: 40px 20px; color: #24292e; margin: 0; }
+                    .container { max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+                    h1 { margin-top: 0; color: #d73a49; display: flex; align-items: center; gap: 10px; }
+                    input:focus { outline: none; border-color: #0366d6; box-shadow: 0 0 0 3px rgba(3, 102, 214, 0.15); }
+                </style>
+                <script>
+                    function toggleEdit(user) {
+                        const el = document.getElementById('edit-' + user);
+                        el.style.display = el.style.display === 'none' ? 'block' : 'none';
+                    }
+                </script>
+            </head>
+            <body>
+                <div class="container">
+                    <h1>Painel Mestre</h1>
+                    <p style="color: #586069; margin-bottom: 25px;">Gerencie as contas de todos os professores cadastrados.</p>
+                    
+                    ${linhasHtml}
+                    
+                    <div style="text-align: center; margin-top: 30px;">
+                        <a href="/" style="color: #0366d6; text-decoration: none; font-weight: 600;">⬅ Voltar ao Painel Inicial</a>
+                    </div>
+                </div>
+            </body>
+            </html>
+        `);
     } else {
         res.status(403).send('Acesso Negado. Chave incorreta.');
     }
