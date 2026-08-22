@@ -407,7 +407,8 @@ async function registrarPresenca(nomeAluno, dataChamada, disciplina, prof) {
                     if (row.getCell(3).value === 'Presente') {
                         jaRegistrado = true;
                     } else {
-                        row.getCell(1).value = new Date().toLocaleString('pt-BR').split(' ')[1]; 
+                        // FORÇA O FUSO HORÁRIO DO BRASIL NA HORA DA MARCAÇÃO
+                        row.getCell(1).value = new Date().toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo' }); 
                         row.getCell(3).value = 'Presente';
                     }
                 }
@@ -418,7 +419,8 @@ async function registrarPresenca(nomeAluno, dataChamada, disciplina, prof) {
 
         if (!encontrou) {
             worksheet.addRow([
-                new Date().toLocaleString('pt-BR').split(' ')[1],
+                // FORÇA O FUSO HORÁRIO DO BRASIL NA HORA DA MARCAÇÃO
+                new Date().toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo' }),
                 nomeAluno,
                 'Presente'
             ]);
