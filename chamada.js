@@ -195,7 +195,14 @@ app.get('/painel-mestre', (req, res) => {
                         <strong>Usuário:</strong> <span style="color: #0366d6;">${user}</span> <br>
                         <span style="color: #666; font-size: 14px; margin-left: 33px;"><strong>Senha:</strong> ${password}</span>
                     </div>
-                    <button onclick="toggleEdit('${user}')" style="background: #eaf5ff; color: #0366d6; border: none; padding: 8px 12px; border-radius: 6px; cursor: pointer; font-weight: bold; transition: 0.2s;">✏️ Editar</button>
+                    <div style="display: flex; gap: 8px;">
+                        <button onclick="toggleEdit('${user}')" style="background: #eaf5ff; color: #0366d6; border: none; padding: 8px 12px; border-radius: 6px; cursor: pointer; font-weight: bold; transition: 0.2s;">✏️ Editar</button>
+                        <form action="/painel-mestre/excluir" method="POST" style="margin: 0;">
+                            <input type="hidden" name="chave" value="${MASTER_KEY}">
+                            <input type="hidden" name="usuario" value="${user}">
+                            <button type="submit" onclick="return confirm('ATENÇÃO: Excluir o professor ${user} apagará todas as suas turmas e planilhas permanentemente! Tem certeza?')" style="background: #ffeef0; color: #d73a49; border: none; padding: 8px 12px; border-radius: 6px; cursor: pointer; font-weight: bold; transition: 0.2s;">🗑️ Excluir</button>
+                        </form>
+                    </div>
                 </div>
 
                 <!-- Formulário de Edição Oculto -->
@@ -248,7 +255,7 @@ app.get('/painel-mestre', (req, res) => {
                     ${linhasHtml}
                     
                     <div style="text-align: center; margin-top: 30px;">
-                        <a href="/" style="color: #0366d6; text-decoration: none; font-weight: 600;">⬅ Voltar ao Painel Inicial</a>
+                        <a href="/login" style="color: #0366d6; text-decoration: none; font-weight: 600;">⬅ Voltar ao Login</a>
                     </div>
                 </div>
             </body>
@@ -258,7 +265,32 @@ app.get('/painel-mestre', (req, res) => {
         res.status(403).send('Acesso Negado. Chave incorreta.');
     }
 });
-// NOVA ROTA: SALVAR A EDIÇÃO DO PROFESSOR (Recebe o formulário e altera a pasta)
+
+// NOVA ROTA: EXCLUIR PROFESSOR
+app.post('/painel-mestre/excluir', (req, res) => {
+    const { chave, usuario } = req.body;
+    
+    if (chave !== MASTER_KEY) return res.status(403).send('Acesso Negado.');
+
+    const usuarios = getUsuarios();
+    
+    // Deleta o usuário do banco de dados (JSON)
+    if (usuarios[usuario]) {
+        delete usuarios[usuario];
+        fs.writeFileSync(ARQUIVO_USUARIOS, JSON.stringify(usuarios, null, 2));
+    }
+
+    // Exclui a pasta inteira do professor (turmas.json e todos os Excels)
+    const dirProfessor = path.join(DIRETORIO_DADOS, usuario);
+    if (fs.existsSync(dirProfessor)) {
+        // Função do Node para apagar pasta e conteúdo à força
+        fs.rmSync(dirProfessor, { recursive: true, force: true });
+    }
+
+    res.redirect('/painel-mestre?chave=' + MASTER_KEY);
+});
+
+// ROTA: SALVAR A EDIÇÃO DO PROFESSOR (Recebe o formulário e altera a pasta)
 app.post('/painel-mestre/editar', (req, res) => {
     const { chave, oldUsuario, newUsuario, novaSenha } = req.body;
     
