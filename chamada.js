@@ -20,6 +20,22 @@ const ARQUIVO_USUARIOS = path.join(DIRETORIO_DADOS, 'usuarios.json');
 
 let estaSalvando = false;
 
+function getDataAtual() {
+    const d = new Date();
+    d.setUTCHours(d.getUTCHours() - 3);
+    return d.toISOString().split('T')[0]; // Retorna YYYY-MM-DD
+}
+
+function getHoraAtual() {
+    const d = new Date();
+    d.setUTCHours(d.getUTCHours() - 3);
+    return d.toISOString().split('T')[1].substring(0, 8); // Retorna HH:MM:SS
+}
+
+if (!fs.existsSync(DIRETORIO_DADOS)) {
+    fs.mkdirSync(DIRETORIO_DADOS, { recursive: true });
+}
+
 if (!fs.existsSync(DIRETORIO_DADOS)) {
     fs.mkdirSync(DIRETORIO_DADOS, { recursive: true });
 }
@@ -407,8 +423,7 @@ async function registrarPresenca(nomeAluno, dataChamada, disciplina, prof) {
                     if (row.getCell(3).value === 'Presente') {
                         jaRegistrado = true;
                     } else {
-                        // FORÇA O FUSO HORÁRIO DO BRASIL NA HORA DA MARCAÇÃO
-                        row.getCell(1).value = new Date().toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo' }); 
+                        row.getCell(1).value = getHoraAtual(); 
                         row.getCell(3).value = 'Presente';
                     }
                 }
@@ -419,8 +434,7 @@ async function registrarPresenca(nomeAluno, dataChamada, disciplina, prof) {
 
         if (!encontrou) {
             worksheet.addRow([
-                // FORÇA O FUSO HORÁRIO DO BRASIL NA HORA DA MARCAÇÃO
-                new Date().toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo' }),
+                getHoraAtual(),
                 nomeAluno,
                 'Presente'
             ]);
@@ -900,7 +914,7 @@ app.post('/atualizar-status', checkAuth, async (req, res) => {
             worksheet.eachRow((row, rowNumber) => {
                 if (rowNumber > 1 && row.getCell(2).value === aluno) {
                     row.getCell(3).value = status;
-                    if (status === 'Presente') row.getCell(1).value = new Date().toLocaleString('pt-BR').split(' ')[1];
+                    if (status === 'Presente') row.getCell(1).value = getHoraAtual();
                     else row.getCell(1).value = '-';
                 }
             });
