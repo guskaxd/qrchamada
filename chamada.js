@@ -258,6 +258,50 @@ app.get('/painel-mestre', (req, res) => {
         res.status(403).send('Acesso Negado. Chave incorreta.');
     }
 });
+// NOVA ROTA: SALVAR A EDIÇÃO DO PROFESSOR (Recebe o formulário e altera a pasta)
+app.post('/painel-mestre/editar', (req, res) => {
+    const { chave, oldUsuario, newUsuario, novaSenha } = req.body;
+    
+    // Trava de segurança extra no envio do formulário
+    if (chave !== MASTER_KEY) return res.status(403).send('Acesso Negado.');
+
+    const usuarios = getUsuarios();
+    
+    // Limpa o novo nome de usuário (evita bugs no nome da pasta)
+    const novoUserLimpo = newUsuario.replace(/[^a-zA-Z0-9_]/g, '').toLowerCase();
+
+    // Impede alterar para o nome de outro professor que já exista
+    if (oldUsuario !== novoUserLimpo && usuarios[novoUserLimpo]) {
+        return res.send(`
+            <div style="text-align: center; margin-top: 50px; font-family: sans-serif;">
+                <h2 style="color: red;">Erro: Este nome de usuário já está em uso!</h2>
+                <button onclick="history.back()" style="padding: 10px 20px; font-size: 16px; cursor: pointer;">Voltar</button>
+            </div>
+        `);
+    }
+
+    // Se o professor trocou o NOME DE USUÁRIO
+    if (oldUsuario !== novoUserLimpo) {
+        usuarios[novoUserLimpo] = novaSenha;
+        delete usuarios[oldUsuario]; // Apaga o usuário antigo do JSON
+        
+        // Magia: Renomeia a pasta do servidor para não perder os excels e turmas!
+        const dirAntigo = path.join(DIRETORIO_DADOS, oldUsuario);
+        const dirNovo = path.join(DIRETORIO_DADOS, novoUserLimpo);
+        if (fs.existsSync(dirAntigo)) {
+            fs.renameSync(dirAntigo, dirNovo);
+        }
+    } else {
+        // Se trocou APENAS a senha, atualiza no JSON e pronto
+        usuarios[oldUsuario] = novaSenha;
+    }
+
+    // Salva o JSON atualizado
+    fs.writeFileSync(ARQUIVO_USUARIOS, JSON.stringify(usuarios, null, 2));
+
+    // Volta direto pro Painel Mestre
+    res.redirect('/painel-mestre?chave=' + MASTER_KEY);
+});
 
 app.post('/cadastrar', (req, res) => {
     const { novoUsuario, novaSenha, masterKey } = req.body;
