@@ -13,6 +13,9 @@ const DIRETORIO_DADOS = '/data';
 const DOMINIO_PUBLICO = 'https://qrchamada-production.up.railway.app';
 const ARQUIVO_TURMAS = path.join(DIRETORIO_DADOS, 'turmas.json');
 
+// SENHA DO PAINEL (Você pode mudar aqui ou nas variáveis do Railway)
+const SENHA_ADMIN = process.env.SENHA_ADMIN || '123456';
+
 let estaSalvando = false;
 
 if (!fs.existsSync(DIRETORIO_DADOS)) {
@@ -28,7 +31,78 @@ function salvarTurmas(turmas) {
     fs.writeFileSync(ARQUIVO_TURMAS, JSON.stringify(turmas, null, 2));
 }
 
-// 1. FUNÇÃO DE REGISTRO
+// === MIDDLEWARE DE AUTENTICAÇÃO ===
+// Essa função verifica se o navegador tem o "passe livre" do professor
+function checarAutenticacao(req, res, next) {
+    if (req.headers.cookie && req.headers.cookie.includes('admin_token=logado')) {
+        next(); // Pode passar!
+    } else {
+        res.redirect('/login'); // Barrado, vai fazer login!
+    }
+}
+
+// ===================================
+// ROTAS DE LOGIN E LOGOUT
+// ===================================
+
+app.get('/login', (req, res) => {
+    // Se a senha estiver errada, a rota POST adiciona ?erro=1 na URL
+    const erroMsg = req.query.erro ? '<p style="color: #d73a49; font-weight: bold; margin-bottom: 15px;">Senha incorreta!</p>' : '';
+
+    res.send(`
+        <!DOCTYPE html>
+        <html lang="pt-BR">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Login - Chamada Digital</title>
+            <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+            <style>
+                :root { --primary: #2ea44f; --primary-hover: #22863a; --bg-color: #f6f8fa; --card-bg: #ffffff; --text-dark: #24292e; --border-color: #e1e4e8; }
+                * { box-sizing: border-box; margin: 0; padding: 0; }
+                body { font-family: 'Inter', sans-serif; background-color: var(--bg-color); color: var(--text-dark); display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 20px; }
+                .card { background: var(--card-bg); padding: 40px; border-radius: 16px; box-shadow: 0 12px 28px rgba(0,0,0,0.05); width: 100%; max-width: 400px; text-align: center; }
+                .logo-ifma { width: 100px; height: auto; margin-bottom: 15px; }
+                input[type="password"] { width: 100%; padding: 14px; margin-bottom: 20px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 16px; text-align: center; letter-spacing: 2px;}
+                input[type="password"]:focus { outline: none; border-color: #0366d6; box-shadow: 0 0 0 3px rgba(3, 102, 214, 0.15); }
+                button { background-color: var(--primary); color: white; border: none; padding: 15px; width: 100%; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; transition: 0.2s; }
+                button:hover { background-color: var(--primary-hover); }
+            </style>
+        </head>
+        <body>
+            <div class="card">
+                <img src="/logo-ifma.png" alt="Logo IFMA" class="logo-ifma" onerror="this.style.display='none'">
+                <h2 style="margin-bottom: 20px;">Acesso Restrito</h2>
+                ${erroMsg}
+                <form action="/login" method="POST">
+                    <input type="password" name="senha" placeholder="Digite a senha do professor" required autofocus>
+                    <button type="submit">Entrar</button>
+                </form>
+            </div>
+        </body>
+        </html>
+    `);
+});
+
+app.post('/login', (req, res) => {
+    if (req.body.senha === SENHA_ADMIN) {
+        // Se acertou a senha, ganha um cookie válido por 7 dias
+        res.setHeader('Set-Cookie', 'admin_token=logado; Max-Age=604800; Path=/; HttpOnly');
+        res.redirect('/');
+    } else {
+        res.redirect('/login?erro=1');
+    }
+});
+
+app.get('/logout', (req, res) => {
+    // Apaga o cookie e expulsa o usuário
+    res.setHeader('Set-Cookie', 'admin_token=; Max-Age=0; Path=/');
+    res.redirect('/login');
+});
+
+// ===================================
+// FUNÇÃO DE REGISTRO EXCEL
+// ===================================
 async function registrarPresenca(nomeAluno, dataChamada, disciplina) {
     while (estaSalvando) {
         await new Promise(resolve => setTimeout(resolve, 500));
@@ -96,8 +170,12 @@ async function registrarPresenca(nomeAluno, dataChamada, disciplina) {
     }
 }
 
+// ===================================
+// ROTAS DO PROFESSOR (PROTEGIDAS PELA FUNÇÃO checkAuth)
+// ===================================
+
 // ROTA 1: PAINEL INICIAL
-app.get('/', (req, res) => {
+app.get('/', checkAuth, (req, res) => {
     const hoje = new Date().toISOString().split('T')[0]; 
     const turmas = getTurmas();
     const nomesTurmas = Object.keys(turmas);
@@ -155,7 +233,7 @@ app.get('/', (req, res) => {
                 :root { --primary: #2ea44f; --primary-hover: #22863a; --bg-color: #f6f8fa; --card-bg: #ffffff; --text-dark: #24292e; --text-muted: #586069; --border-color: #e1e4e8; --blue: #0366d6; --blue-hover: #005cc5;}
                 * { box-sizing: border-box; margin: 0; padding: 0; }
                 body { font-family: 'Inter', sans-serif; background-color: var(--bg-color); color: var(--text-dark); display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 20px; }
-                .card { background: var(--card-bg); padding: 40px; border-radius: 16px; box-shadow: 0 12px 28px rgba(0,0,0,0.05); width: 100%; max-width: 480px; }
+                .card { background: var(--card-bg); padding: 40px; border-radius: 16px; box-shadow: 0 12px 28px rgba(0,0,0,0.05); width: 100%; max-width: 480px; position: relative;}
                 .header { text-align: center; margin-bottom: 30px; }
                 .logo-ifma { width: 100px; height: auto; margin-bottom: 15px; }
                 .header h1 { font-size: 24px; font-weight: 700; margin-bottom: 8px; color: var(--text-dark); }
@@ -179,10 +257,12 @@ app.get('/', (req, res) => {
                 .btn-delete { background: none; border: none; padding: 12px 16px; cursor: pointer; border-left: 1px solid var(--border-color); font-size: 16px; transition: 0.2s; border-radius: 0 8px 8px 0; }
                 .btn-delete:hover { background-color: #ffeef0; }
                 .empty-state { text-align: center; padding: 20px 0; color: var(--text-muted); }
+                .btn-logout { position: absolute; top: 20px; right: 20px; text-decoration: none; color: #d73a49; font-weight: bold; font-size: 14px; background: #ffeef0; padding: 5px 10px; border-radius: 6px; }
             </style>
         </head>
         <body>
             <div class="card">
+                <a href="/logout" class="btn-logout" title="Sair do sistema">Sair 🚪</a>
                 <div class="header">
                     <img src="/logo-ifma.png" alt="Logo IFMA" class="logo-ifma" onerror="this.style.display='none'">
                     <h1>Chamada Digital</h1>
@@ -223,361 +303,8 @@ app.get('/', (req, res) => {
     `);
 });
 
-// ROTA 2: VISUALIZAÇÃO E EDIÇÃO NA WEB DA CHAMADA
-app.get('/ver/:nomeDoArquivo', async (req, res) => {
-    try {
-        const arquivoRequisitado = req.params.nomeDoArquivo;
-        const caminhoCompleto = path.join(DIRETORIO_DADOS, arquivoRequisitado);
-
-        if (!fs.existsSync(caminhoCompleto)) {
-            return res.status(404).send("Arquivo não encontrado.");
-        }
-
-        const workbook = new ExcelJS.Workbook();
-        await workbook.xlsx.readFile(caminhoCompleto);
-        const worksheet = workbook.getWorksheet('Presencas');
-
-        let linhasHtml = '';
-        let totalAlunos = 0;
-        let qtdPresentes = 0;
-        let qtdFaltas = 0;
-
-        worksheet.eachRow((row, rowNumber) => {
-            if (rowNumber > 1) { 
-                totalAlunos++;
-                const hora = row.getCell(1).value || '-';
-                const nome = row.getCell(2).value || '';
-                const status = row.getCell(3).value || 'Falta';
-
-                if (status === 'Presente') {
-                    qtdPresentes++;
-                } else {
-                    qtdFaltas++;
-                }
-
-                const statusForm = `
-                    <form action="/atualizar-status" method="POST" style="margin: 0;">
-                        <input type="hidden" name="arquivo" value="${arquivoRequisitado}">
-                        <input type="hidden" name="aluno" value="${nome}">
-                        <select name="status" onchange="this.form.submit()" class="select-status ${status === 'Presente' ? 'select-presente' : 'select-falta'}">
-                            <option value="Presente" ${status === 'Presente' ? 'selected' : ''}>Presente</option>
-                            <option value="Falta" ${status === 'Falta' ? 'selected' : ''}>Falta</option>
-                        </select>
-                    </form>
-                `;
-
-                linhasHtml += `
-                    <tr>
-                        <td>${nome}</td>
-                        <td>${statusForm}</td>
-                        <td style="color: #666; font-size: 13px;">${hora}</td>
-                    </tr>
-                `;
-            }
-        });
-
-        const nomeExibicao = arquivoRequisitado.replace('presenca_', '').replace('.xlsx', '').replace(/_/g, ' ');
-
-        res.send(`
-            <!DOCTYPE html>
-            <html lang="pt-BR">
-            <head>
-                <meta charset="UTF-8">
-                <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <title>Relatório - ${nomeExibicao}</title>
-                <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-                <style>
-                    :root { --bg-color: #f6f8fa; --card-bg: #ffffff; --text-dark: #24292e; --border-color: #e1e4e8; }
-                    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
-                    body { background-color: var(--bg-color); color: var(--text-dark); padding: 30px 20px; display: flex; flex-direction: column; align-items: center; }
-                    
-                    .container { background: var(--card-bg); width: 100%; max-width: 700px; padding: 30px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
-                    .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 20px; margin-bottom: 20px; }
-                    .header h1 { font-size: 20px; color: #0366d6; }
-                    
-                    .stats { display: flex; gap: 15px; margin-bottom: 20px; }
-                    .stat-box { flex: 1; background: #fafbfc; border: 1px solid var(--border-color); padding: 15px; border-radius: 8px; text-align: center; }
-                    .stat-box h3 { font-size: 24px; margin-bottom: 5px; }
-                    .stat-box p { font-size: 13px; color: #666; font-weight: 500; text-transform: uppercase; }
-                    
-                    table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
-                    th, td { padding: 12px 15px; text-align: left; border-bottom: 1px solid var(--border-color); }
-                    th { background-color: #f6f8fa; font-size: 13px; color: #586069; text-transform: uppercase; }
-                    td { font-size: 15px; font-weight: 500; }
-                    tr:hover { background-color: #fafdff; }
-                    
-                    .select-status { padding: 6px 10px; border-radius: 20px; font-size: 13px; font-weight: 600; cursor: pointer; outline: none; text-align: center; font-family: 'Inter', sans-serif;}
-                    .select-presente { background-color: #dcffe4; color: #1a7f37; border: 1px solid #a3ebba; }
-                    .select-falta { background-color: #ffeef0; color: #d73a49; border: 1px solid #ffdce0; }
-                    
-                    .actions { display: flex; justify-content: space-between; gap: 15px; }
-                    .btn { flex: 1; text-align: center; text-decoration: none; padding: 12px; border-radius: 8px; font-weight: 600; font-size: 15px; transition: 0.2s; }
-                    .btn-back { background-color: #e1e4e8; color: #24292e; }
-                    .btn-back:hover { background-color: #d1d5da; }
-                    .btn-download { background-color: #2ea44f; color: white; }
-                    .btn-download:hover { background-color: #22863a; }
-                </style>
-            </head>
-            <body>
-                <div class="container">
-                    <div class="header">
-                        <h1>📋 ${nomeExibicao}</h1>
-                    </div>
-
-                    <div class="stats">
-                        <div class="stat-box">
-                            <h3 style="color: #24292e;">${totalAlunos}</h3>
-                            <p>Total</p>
-                        </div>
-                        <div class="stat-box">
-                            <h3 style="color: #2ea44f;">${qtdPresentes}</h3>
-                            <p>Presentes</p>
-                        </div>
-                        <div class="stat-box">
-                            <h3 style="color: #d73a49;">${qtdFaltas}</h3>
-                            <p>Faltas</p>
-                        </div>
-                    </div>
-                    
-                    <p style="font-size: 13px; color: #666; margin-bottom: 10px;">💡 Dica: Clique no status de um aluno para alterar manualmente.</p>
-
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Aluno</th>
-                                <th>Status</th>
-                                <th>Hora</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${linhasHtml}
-                        </tbody>
-                    </table>
-
-                    <div class="actions">
-                        <a href="/" class="btn btn-back">⬅ Voltar ao Painel</a>
-                        <a href="/baixar/${arquivoRequisitado}" class="btn btn-download">📥 Baixar Excel</a>
-                    </div>
-                </div>
-            </body>
-            </html>
-        `);
-    } catch (err) {
-        console.error(err);
-        res.status(500).send("Erro ao ler a planilha de presenças.");
-    }
-});
-
-// RECEBE A ALTERAÇÃO MANUAL E SALVA
-app.post('/atualizar-status', async (req, res) => {
-    try {
-        const { arquivo, aluno, status } = req.body;
-        const caminhoCompleto = path.join(DIRETORIO_DADOS, arquivo);
-
-        while (estaSalvando) {
-            await new Promise(resolve => setTimeout(resolve, 500));
-        }
-        estaSalvando = true;
-
-        if (fs.existsSync(caminhoCompleto)) {
-            const workbook = new ExcelJS.Workbook();
-            await workbook.xlsx.readFile(caminhoCompleto);
-            const worksheet = workbook.getWorksheet('Presencas');
-
-            worksheet.eachRow((row, rowNumber) => {
-                if (rowNumber > 1 && row.getCell(2).value === aluno) {
-                    row.getCell(3).value = status;
-                    
-                    if (status === 'Presente') {
-                        row.getCell(1).value = new Date().toLocaleString('pt-BR').split(' ')[1];
-                    } else {
-                        row.getCell(1).value = '-';
-                    }
-                }
-            });
-
-            await workbook.xlsx.writeFile(caminhoCompleto);
-        }
-        
-        estaSalvando = false;
-        res.redirect(`/ver/${arquivo}`);
-
-    } catch (error) {
-        estaSalvando = false;
-        console.error(error);
-        res.status(500).send("Erro ao atualizar a presença.");
-    }
-});
-
-// PÁGINA PARA GERENCIAR TURMAS (COM BOTÃO EDITAR E FORMULÁRIO DE EDIÇÃO)
-app.get('/turmas', (req, res) => {
-    const turmas = getTurmas();
-    const nomesTurmas = Object.keys(turmas);
-    
-    let turmasHtml = '';
-    if (nomesTurmas.length === 0) {
-        turmasHtml = `<p style="color: var(--text-muted); text-align: center;">Nenhuma turma cadastrada.</p>`;
-    } else {
-        nomesTurmas.forEach(nome => {
-            const qtdAlunos = turmas[nome].length;
-            // Transforma o array de alunos em texto (linhas) para colocar dentro da textarea de edição
-            const listaAlunosTexto = turmas[nome].join('\n');
-            
-            turmasHtml += `
-                <div class="file-item-container" style="margin-bottom: 15px; flex-direction: column; align-items: stretch; padding: 15px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                        <div class="file-info">
-                            <span class="file-icon">👥</span>
-                            <span class="file-name" style="font-size: 16px;">${nome} <span style="color: #666; font-size: 12px; font-weight: 400;">(${qtdAlunos} alunos)</span></span>
-                        </div>
-                        <div style="display: flex; gap: 10px;">
-                            <!-- Botão de Editar -->
-                            <button type="button" onclick="toggleEdit('${nome}')" class="btn-action" style="border: none; background: #eaf5ff; padding: 8px 12px; border-radius: 6px; color: #0366d6; cursor: pointer; font-size: 14px; font-weight: 600;">✏️ Editar</button>
-                            
-                            <!-- Botão de Excluir -->
-                            <form action="/turmas/excluir/${encodeURIComponent(nome)}" method="POST" style="margin: 0;">
-                                <button type="submit" class="btn-delete" title="Excluir Turma" onclick="return confirm('Excluir a turma ${nome}? Todas as planilhas futuras não terão mais a lista de alunos.')" style="border: 1px solid var(--border-color); border-radius: 6px;">🗑️</button>
-                            </form>
-                        </div>
-                    </div>
-                    
-                    <!-- Formulário de Edição (Oculto por padrão, aparece ao clicar em Editar) -->
-                    <div id="edit-${nome}" style="display: none; border-top: 1px solid var(--border-color); padding-top: 15px; margin-top: 5px;">
-                        <form action="/turmas/editar/${encodeURIComponent(nome)}" method="POST">
-                            <label style="font-size: 13px;">Lista de Alunos Atualizada:</label>
-                            <textarea name="listaAlunos" rows="6" style="margin-bottom: 10px;" required>${listaAlunosTexto}</textarea>
-                            <div style="display: flex; gap: 10px;">
-                                <button type="submit" class="btn" style="margin-bottom: 0; padding: 10px;">💾 Salvar Alterações</button>
-                                <button type="button" class="btn" onclick="toggleEdit('${nome}')" style="margin-bottom: 0; padding: 10px; background-color: #e1e4e8; color: #24292e;">Cancelar</button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            `;
-        });
-    }
-
-    res.send(`
-        <!DOCTYPE html>
-        <html lang="pt-BR">
-        <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Gerenciar Turmas</title>
-            <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-            <style>
-                :root { --primary: #2ea44f; --bg-color: #f6f8fa; --card-bg: #ffffff; --text-dark: #24292e; --text-muted: #586069; --border-color: #e1e4e8; }
-                * { box-sizing: border-box; margin: 0; padding: 0; }
-                body { font-family: 'Inter', sans-serif; background-color: var(--bg-color); color: var(--text-dark); display: flex; justify-content: center; align-items: flex-start; min-height: 100vh; padding: 20px; }
-                .card { background: var(--card-bg); padding: 40px; border-radius: 16px; box-shadow: 0 12px 28px rgba(0,0,0,0.05); width: 100%; max-width: 600px; margin-top: 20px;}
-                .header { text-align: center; margin-bottom: 30px; }
-                .header h1 { font-size: 24px; font-weight: 700; margin-bottom: 8px;}
-                .input-group { margin-bottom: 20px; text-align: left; }
-                label { display: block; margin-bottom: 8px; font-weight: 600; font-size: 14px; }
-                input[type="text"], textarea { width: 100%; padding: 12px 16px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 15px; font-family: 'Inter', sans-serif; resize: vertical;}
-                .btn { display: flex; justify-content: center; gap: 8px; width: 100%; background-color: var(--primary); color: white; padding: 14px; border: none; font-size: 16px; font-weight: 600; border-radius: 8px; cursor: pointer; margin-bottom: 20px; transition: 0.2s;}
-                .btn:hover { opacity: 0.9; }
-                .history-section { border-top: 1px solid var(--border-color); padding-top: 25px; }
-                .history-section h3 { font-size: 16px; font-weight: 600; margin-bottom: 15px; }
-                .file-item-container { background-color: #fff; border: 1px solid var(--border-color); border-radius: 8px; }
-                .file-info { display: flex; align-items: center; gap: 10px; font-weight: 600;}
-                .btn-delete { background: none; padding: 8px 12px; cursor: pointer; font-size: 16px; transition: 0.2s; }
-                .btn-delete:hover { background-color: #ffeef0; }
-            </style>
-            <!-- Script para exibir/esconder a aba de Edição de Turma -->
-            <script>
-                function toggleEdit(nome) {
-                    const el = document.getElementById('edit-' + nome);
-                    if (el.style.display === 'none') {
-                        el.style.display = 'block';
-                    } else {
-                        el.style.display = 'none';
-                    }
-                }
-            </script>
-        </head>
-        <body>
-            <div class="card">
-                <div class="header">
-                    <h1>⚙️ Gerenciar Turmas</h1>
-                    <p style="color: var(--text-muted); font-size: 14px;">Cadastre uma nova turma ou edite as existentes.</p>
-                </div>
-                
-                <form action="/turmas/adicionar" method="POST" style="background: #fafbfc; padding: 20px; border-radius: 12px; border: 1px dashed var(--border-color); margin-bottom: 30px;">
-                    <h3 style="margin-bottom: 15px; font-size: 16px;">Nova Turma</h3>
-                    <div class="input-group">
-                        <label for="nomeTurma">Nome da Disciplina / Turma</label>
-                        <input type="text" id="nomeTurma" name="nomeTurma" placeholder="Ex: Informática 2" required autocomplete="off">
-                    </div>
-                    <div class="input-group">
-                        <label for="listaAlunos">Lista de Alunos</label>
-                        <p style="font-size: 12px; color: #666; margin-top: -5px; margin-bottom: 8px;">Cole o nome dos alunos (um por linha).</p>
-                        <textarea id="listaAlunos" name="listaAlunos" rows="4" placeholder="Ana Silva&#10;Bruno Costa..." required></textarea>
-                    </div>
-                    <button type="submit" class="btn" style="margin-bottom: 0;">➕ Cadastrar Turma</button>
-                </form>
-
-                <div class="history-section">
-                    <h3>👥 Suas Turmas</h3>
-                    <div>${turmasHtml}</div>
-                </div>
-
-                <div style="text-align: center; margin-top: 30px;">
-                    <a href="/" style="text-decoration: none; color: #0366d6; font-weight: 600;">⬅ Voltar ao Painel Principal</a>
-                </div>
-            </div>
-        </body>
-        </html>
-    `);
-});
-
-// ROTA: SALVA NOVA TURMA
-app.post('/turmas/adicionar', (req, res) => {
-    const nomeTurma = req.body.nomeTurma.trim();
-    const listaAlunosRaw = req.body.listaAlunos || '';
-    const alunos = listaAlunosRaw.split('\n').map(a => a.trim()).filter(a => a.length > 0);
-    
-    if (nomeTurma && alunos.length > 0) {
-        const turmas = getTurmas();
-        turmas[nomeTurma] = alunos; 
-        salvarTurmas(turmas);
-    }
-    res.redirect('/turmas');
-});
-
-// NOVA ROTA: SALVA EDIÇÃO DE UMA TURMA EXISTENTE
-app.post('/turmas/editar/:nome', (req, res) => {
-    const nomeTurma = req.params.nome;
-    const listaAlunosRaw = req.body.listaAlunos || '';
-    
-    // Transforma o texto do textarea num array limpo e tira as linhas vazias
-    const alunos = listaAlunosRaw.split('\n').map(a => a.trim()).filter(a => a.length > 0);
-    
-    const turmas = getTurmas();
-    
-    // Se a turma existir e a lista não estiver vazia, ele salva a edição no arquivo JSON
-    if (turmas[nomeTurma] && alunos.length > 0) {
-        turmas[nomeTurma] = alunos;
-        salvarTurmas(turmas);
-    }
-    
-    res.redirect('/turmas');
-});
-
-// ROTA: EXCLUIR TURMA
-app.post('/turmas/excluir/:nome', (req, res) => {
-    const nomeTurma = req.params.nome;
-    const turmas = getTurmas();
-    if (turmas[nomeTurma]) {
-        delete turmas[nomeTurma];
-        salvarTurmas(turmas);
-    }
-    res.redirect('/turmas');
-});
-
-
-// GERA O QR CODE E CRIA PLANILHA
-app.post('/qr-turma', async (req, res) => {
+// GERA O QR CODE
+app.post('/qr-turma', checkAuth, async (req, res) => {
     try {
         const dataAula = req.body.data;
         const disciplina = req.body.disciplina; 
@@ -625,7 +352,317 @@ app.post('/qr-turma', async (req, res) => {
     }
 });
 
-// FORMULÁRIO DO ALUNO
+// PÁGINA PARA GERENCIAR TURMAS
+app.get('/turmas', checkAuth, (req, res) => {
+    const turmas = getTurmas();
+    const nomesTurmas = Object.keys(turmas);
+    
+    let turmasHtml = '';
+    if (nomesTurmas.length === 0) {
+        turmasHtml = `<p style="color: var(--text-muted); text-align: center;">Nenhuma turma cadastrada.</p>`;
+    } else {
+        nomesTurmas.forEach(nome => {
+            const qtdAlunos = turmas[nome].length;
+            const listaAlunosTexto = turmas[nome].join('\n');
+            
+            turmasHtml += `
+                <div class="file-item-container" style="margin-bottom: 15px; flex-direction: column; align-items: stretch; padding: 15px; background-color: #fff; border: 1px solid var(--border-color); border-radius: 8px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <div class="file-info" style="display: flex; align-items: center; gap: 10px; font-weight: 600;">
+                            <span class="file-icon">👥</span>
+                            <span class="file-name" style="font-size: 16px;">${nome} <span style="color: #666; font-size: 12px; font-weight: 400;">(${qtdAlunos} alunos)</span></span>
+                        </div>
+                        <div style="display: flex; gap: 10px;">
+                            <button onclick="toggleEdit('${nome}')" class="btn-action" style="border: none; background: #eaf5ff; padding: 8px 12px; border-radius: 6px; color: #0366d6; cursor: pointer; font-size: 14px; font-weight: 600;">✏️ Editar</button>
+                            <form action="/turmas/excluir/${encodeURIComponent(nome)}" method="POST" style="margin: 0;">
+                                <button type="submit" class="btn-delete" title="Excluir Turma" onclick="return confirm('Excluir a turma ${nome}? Todas as planilhas futuras não terão mais a lista de alunos.')" style="border: 1px solid var(--border-color); border-radius: 6px; background: transparent; cursor: pointer; padding: 8px 12px;">🗑️</button>
+                            </form>
+                        </div>
+                    </div>
+                    
+                    <div id="edit-${nome}" style="display: none; border-top: 1px solid var(--border-color); padding-top: 15px; margin-top: 5px;">
+                        <form action="/turmas/editar/${encodeURIComponent(nome)}" method="POST">
+                            <label style="font-size: 13px; font-weight: bold; display:block; margin-bottom:5px;">Lista de Alunos Atualizada:</label>
+                            <textarea name="listaAlunos" rows="6" style="width: 100%; padding: 10px; margin-bottom: 10px; border-radius: 6px; border: 1px solid var(--border-color);" required>${listaAlunosTexto}</textarea>
+                            <div style="display: flex; gap: 10px;">
+                                <button type="submit" style="background: var(--primary); color: white; border: none; padding: 10px 15px; border-radius: 6px; cursor: pointer; font-weight: bold;">💾 Salvar</button>
+                                <button type="button" onclick="toggleEdit('${nome}')" style="background: #e1e4e8; color: #24292e; border: none; padding: 10px 15px; border-radius: 6px; cursor: pointer; font-weight: bold;">Cancelar</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            `;
+        });
+    }
+
+    res.send(`
+        <!DOCTYPE html>
+        <html lang="pt-BR">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Gerenciar Turmas</title>
+            <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+            <style>
+                :root { --primary: #2ea44f; --bg-color: #f6f8fa; --card-bg: #ffffff; --text-dark: #24292e; --text-muted: #586069; --border-color: #e1e4e8; }
+                * { box-sizing: border-box; margin: 0; padding: 0; }
+                body { font-family: 'Inter', sans-serif; background-color: var(--bg-color); color: var(--text-dark); display: flex; justify-content: center; align-items: flex-start; min-height: 100vh; padding: 20px; }
+                .card { background: var(--card-bg); padding: 40px; border-radius: 16px; box-shadow: 0 12px 28px rgba(0,0,0,0.05); width: 100%; max-width: 600px; margin-top: 20px;}
+                .header { text-align: center; margin-bottom: 30px; }
+                .header h1 { font-size: 24px; font-weight: 700; margin-bottom: 8px;}
+                .input-group { margin-bottom: 20px; text-align: left; }
+                label { display: block; margin-bottom: 8px; font-weight: 600; font-size: 14px; }
+                input[type="text"], textarea { width: 100%; padding: 12px 16px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 15px; font-family: 'Inter', sans-serif; resize: vertical;}
+                .btn { display: flex; justify-content: center; gap: 8px; width: 100%; background-color: var(--primary); color: white; padding: 14px; border: none; font-size: 16px; font-weight: 600; border-radius: 8px; cursor: pointer; margin-bottom: 20px; transition: 0.2s;}
+                .btn:hover { opacity: 0.9; }
+                .history-section { border-top: 1px solid var(--border-color); padding-top: 25px; }
+                .history-section h3 { font-size: 16px; font-weight: 600; margin-bottom: 15px; }
+            </style>
+            <script>
+                function toggleEdit(nome) {
+                    const el = document.getElementById('edit-' + nome);
+                    if (el.style.display === 'none') {
+                        el.style.display = 'block';
+                    } else {
+                        el.style.display = 'none';
+                    }
+                }
+            </script>
+        </head>
+        <body>
+            <div class="card">
+                <div class="header">
+                    <h1>⚙️ Gerenciar Turmas</h1>
+                    <p style="color: var(--text-muted); font-size: 14px;">Cadastre uma nova turma ou edite as existentes.</p>
+                </div>
+                
+                <form action="/turmas/adicionar" method="POST" style="background: #fafbfc; padding: 20px; border-radius: 12px; border: 1px dashed var(--border-color); margin-bottom: 30px;">
+                    <h3 style="margin-bottom: 15px; font-size: 16px;">Nova Turma</h3>
+                    <div class="input-group">
+                        <label for="nomeTurma">Nome da Disciplina / Turma</label>
+                        <input type="text" id="nomeTurma" name="nomeTurma" placeholder="Ex: Informática 2" required autocomplete="off">
+                    </div>
+                    <div class="input-group">
+                        <label for="listaAlunos">Lista de Alunos</label>
+                        <p style="font-size: 12px; color: #666; margin-top: -5px; margin-bottom: 8px;">Cole o nome dos alunos (um por linha).</p>
+                        <textarea id="listaAlunos" name="listaAlunos" rows="4" placeholder="Ana Silva&#10;Bruno Costa..." required></textarea>
+                    </div>
+                    <button type="submit" class="btn" style="margin-bottom: 0;">➕ Cadastrar Turma</button>
+                </form>
+
+                <div class="history-section">
+                    <h3>👥 Suas Turmas</h3>
+                    <div>${turmasHtml}</div>
+                </div>
+
+                <div style="text-align: center; margin-top: 30px;">
+                    <a href="/" style="text-decoration: none; color: #0366d6; font-weight: 600;">⬅ Voltar ao Painel Principal</a>
+                </div>
+            </div>
+        </body>
+        </html>
+    `);
+});
+
+app.post('/turmas/adicionar', checkAuth, (req, res) => {
+    const nomeTurma = req.body.nomeTurma.trim();
+    const listaAlunosRaw = req.body.listaAlunos || '';
+    const alunos = listaAlunosRaw.split('\n').map(a => a.trim()).filter(a => a.length > 0);
+    
+    if (nomeTurma && alunos.length > 0) {
+        const turmas = getTurmas();
+        turmas[nomeTurma] = alunos; 
+        salvarTurmas(turmas);
+    }
+    res.redirect('/turmas');
+});
+
+app.post('/turmas/editar/:nome', checkAuth, (req, res) => {
+    const nomeTurma = req.params.nome;
+    const listaAlunosRaw = req.body.listaAlunos || '';
+    const alunos = listaAlunosRaw.split('\n').map(a => a.trim()).filter(a => a.length > 0);
+    const turmas = getTurmas();
+    if (turmas[nomeTurma] && alunos.length > 0) {
+        turmas[nomeTurma] = alunos;
+        salvarTurmas(turmas);
+    }
+    res.redirect('/turmas');
+});
+
+app.post('/turmas/excluir/:nome', checkAuth, (req, res) => {
+    const nomeTurma = req.params.nome;
+    const turmas = getTurmas();
+    if (turmas[nomeTurma]) {
+        delete turmas[nomeTurma];
+        salvarTurmas(turmas);
+    }
+    res.redirect('/turmas');
+});
+
+// VISUALIZAÇÃO E EDIÇÃO NA WEB DA CHAMADA
+app.get('/ver/:nomeDoArquivo', checkAuth, async (req, res) => {
+    try {
+        const arquivoRequisitado = req.params.nomeDoArquivo;
+        const caminhoCompleto = path.join(DIRETORIO_DADOS, arquivoRequisitado);
+
+        if (!fs.existsSync(caminhoCompleto)) return res.status(404).send("Arquivo não encontrado.");
+
+        const workbook = new ExcelJS.Workbook();
+        await workbook.xlsx.readFile(caminhoCompleto);
+        const worksheet = workbook.getWorksheet('Presencas');
+
+        let linhasHtml = '';
+        let totalAlunos = 0; let qtdPresentes = 0; let qtdFaltas = 0;
+
+        worksheet.eachRow((row, rowNumber) => {
+            if (rowNumber > 1) { 
+                totalAlunos++;
+                const hora = row.getCell(1).value || '-';
+                const nome = row.getCell(2).value || '';
+                const status = row.getCell(3).value || 'Falta';
+
+                if (status === 'Presente') qtdPresentes++; else qtdFaltas++;
+
+                const statusForm = `
+                    <form action="/atualizar-status" method="POST" style="margin: 0;">
+                        <input type="hidden" name="arquivo" value="${arquivoRequisitado}">
+                        <input type="hidden" name="aluno" value="${nome}">
+                        <select name="status" onchange="this.form.submit()" class="select-status ${status === 'Presente' ? 'select-presente' : 'select-falta'}">
+                            <option value="Presente" ${status === 'Presente' ? 'selected' : ''}>Presente</option>
+                            <option value="Falta" ${status === 'Falta' ? 'selected' : ''}>Falta</option>
+                        </select>
+                    </form>
+                `;
+
+                linhasHtml += `
+                    <tr>
+                        <td>${nome}</td>
+                        <td>${statusForm}</td>
+                        <td style="color: #666; font-size: 13px;">${hora}</td>
+                    </tr>
+                `;
+            }
+        });
+
+        const nomeExibicao = arquivoRequisitado.replace('presenca_', '').replace('.xlsx', '').replace(/_/g, ' ');
+
+        res.send(`
+            <!DOCTYPE html>
+            <html lang="pt-BR">
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>Relatório - ${nomeExibicao}</title>
+                <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+                <style>
+                    :root { --bg-color: #f6f8fa; --card-bg: #ffffff; --text-dark: #24292e; --border-color: #e1e4e8; }
+                    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
+                    body { background-color: var(--bg-color); color: var(--text-dark); padding: 30px 20px; display: flex; flex-direction: column; align-items: center; }
+                    .container { background: var(--card-bg); width: 100%; max-width: 700px; padding: 30px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+                    .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 20px; margin-bottom: 20px; }
+                    .header h1 { font-size: 20px; color: #0366d6; }
+                    .stats { display: flex; gap: 15px; margin-bottom: 20px; }
+                    .stat-box { flex: 1; background: #fafbfc; border: 1px solid var(--border-color); padding: 15px; border-radius: 8px; text-align: center; }
+                    .stat-box h3 { font-size: 24px; margin-bottom: 5px; }
+                    .stat-box p { font-size: 13px; color: #666; font-weight: 500; text-transform: uppercase; }
+                    table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
+                    th, td { padding: 12px 15px; text-align: left; border-bottom: 1px solid var(--border-color); }
+                    th { background-color: #f6f8fa; font-size: 13px; color: #586069; text-transform: uppercase; }
+                    td { font-size: 15px; font-weight: 500; }
+                    tr:hover { background-color: #fafdff; }
+                    .select-status { padding: 6px 10px; border-radius: 20px; font-size: 13px; font-weight: 600; cursor: pointer; outline: none; text-align: center; font-family: 'Inter', sans-serif;}
+                    .select-presente { background-color: #dcffe4; color: #1a7f37; border: 1px solid #a3ebba; }
+                    .select-falta { background-color: #ffeef0; color: #d73a49; border: 1px solid #ffdce0; }
+                    .actions { display: flex; justify-content: space-between; gap: 15px; }
+                    .btn { flex: 1; text-align: center; text-decoration: none; padding: 12px; border-radius: 8px; font-weight: 600; font-size: 15px; transition: 0.2s; }
+                    .btn-back { background-color: #e1e4e8; color: #24292e; }
+                    .btn-back:hover { background-color: #d1d5da; }
+                    .btn-download { background-color: #2ea44f; color: white; }
+                    .btn-download:hover { background-color: #22863a; }
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <div class="header"><h1>📋 ${nomeExibicao}</h1></div>
+                    <div class="stats">
+                        <div class="stat-box"><h3 style="color: #24292e;">${totalAlunos}</h3><p>Total</p></div>
+                        <div class="stat-box"><h3 style="color: #2ea44f;">${qtdPresentes}</h3><p>Presentes</p></div>
+                        <div class="stat-box"><h3 style="color: #d73a49;">${qtdFaltas}</h3><p>Faltas</p></div>
+                    </div>
+                    <p style="font-size: 13px; color: #666; margin-bottom: 10px;">💡 Dica: Clique no status de um aluno para alterar manualmente.</p>
+                    <table>
+                        <thead><tr><th>Aluno</th><th>Status</th><th>Hora</th></tr></thead>
+                        <tbody>${linhasHtml}</tbody>
+                    </table>
+                    <div class="actions">
+                        <a href="/" class="btn btn-back">⬅ Voltar ao Painel</a>
+                        <a href="/baixar/${arquivoRequisitado}" class="btn btn-download">📥 Baixar Excel</a>
+                    </div>
+                </div>
+            </body>
+            </html>
+        `);
+    } catch (err) {
+        res.status(500).send("Erro ao ler a planilha de presenças.");
+    }
+});
+
+app.post('/atualizar-status', checkAuth, async (req, res) => {
+    try {
+        const { arquivo, aluno, status } = req.body;
+        const caminhoCompleto = path.join(DIRETORIO_DADOS, arquivo);
+
+        while (estaSalvando) { await new Promise(resolve => setTimeout(resolve, 500)); }
+        estaSalvando = true;
+
+        if (fs.existsSync(caminhoCompleto)) {
+            const workbook = new ExcelJS.Workbook();
+            await workbook.xlsx.readFile(caminhoCompleto);
+            const worksheet = workbook.getWorksheet('Presencas');
+
+            worksheet.eachRow((row, rowNumber) => {
+                if (rowNumber > 1 && row.getCell(2).value === aluno) {
+                    row.getCell(3).value = status;
+                    if (status === 'Presente') row.getCell(1).value = new Date().toLocaleString('pt-BR').split(' ')[1];
+                    else row.getCell(1).value = '-';
+                }
+            });
+            await workbook.xlsx.writeFile(caminhoCompleto);
+        }
+        estaSalvando = false;
+        res.redirect(`/ver/${arquivo}`);
+
+    } catch (error) {
+        estaSalvando = false;
+        res.status(500).send("Erro ao atualizar a presença.");
+    }
+});
+
+app.get('/baixar/:nomeDoArquivo', checkAuth, (req, res) => {
+    const arquivoRequisitado = req.params.nomeDoArquivo;
+    if (arquivoRequisitado.endsWith('.xlsx')) {
+        const caminhoCompleto = path.join(DIRETORIO_DADOS, arquivoRequisitado);
+        if (fs.existsSync(caminhoCompleto)) res.download(caminhoCompleto);
+        else res.status(404).send('Arquivo não encontrado.');
+    } else {
+        res.status(403).send('Acesso negado.');
+    }
+});
+
+app.post('/excluir/:nomeDoArquivo', checkAuth, (req, res) => {
+    const arquivoRequisitado = req.params.nomeDoArquivo;
+    if (arquivoRequisitado.endsWith('.xlsx') && !arquivoRequisitado.includes('..')) {
+        const caminhoCompleto = path.join(DIRETORIO_DADOS, arquivoRequisitado);
+        if (fs.existsSync(caminhoCompleto)) fs.unlinkSync(caminhoCompleto);
+    }
+    res.redirect('/');
+});
+
+
+// ===================================
+// ROTAS DO ALUNO (PÚBLICAS, NÃO PRECISAM DE SENHA)
+// ===================================
+
 app.get('/chamada', async (req, res) => {
     try {
         const dataAula = req.query.data;
@@ -638,9 +675,7 @@ app.get('/chamada', async (req, res) => {
         let optionsHtml = '<option value="" disabled selected>Selecione seu nome na lista...</option>';
 
         if (alunosDaTurma.length > 0) {
-            alunosDaTurma.sort().forEach(nome => {
-                optionsHtml += `<option value="${nome}">${nome}</option>`;
-            });
+            alunosDaTurma.sort().forEach(nome => { optionsHtml += `<option value="${nome}">${nome}</option>`; });
             inputHtml = `<select name="nomeAluno" required>${optionsHtml}</select>`;
         } else {
             inputHtml = `<input type="text" name="nomeAluno" placeholder="Seu nome completo" required autocomplete="off">`;
@@ -749,31 +784,6 @@ app.post('/registrar', async (req, res) => {
             res.status(500).send('Erro interno ao salvar presença.');
         }
     }
-});
-
-app.get('/baixar/:nomeDoArquivo', (req, res) => {
-    const arquivoRequisitado = req.params.nomeDoArquivo;
-    if (arquivoRequisitado.endsWith('.xlsx')) {
-        const caminhoCompleto = path.join(DIRETORIO_DADOS, arquivoRequisitado);
-        if (fs.existsSync(caminhoCompleto)) {
-            res.download(caminhoCompleto);
-        } else {
-            res.status(404).send('Arquivo não encontrado.');
-        }
-    } else {
-        res.status(403).send('Acesso negado.');
-    }
-});
-
-app.post('/excluir/:nomeDoArquivo', (req, res) => {
-    const arquivoRequisitado = req.params.nomeDoArquivo;
-    if (arquivoRequisitado.endsWith('.xlsx') && !arquivoRequisitado.includes('..')) {
-        const caminhoCompleto = path.join(DIRETORIO_DADOS, arquivoRequisitado);
-        if (fs.existsSync(caminhoCompleto)) {
-            fs.unlinkSync(caminhoCompleto);
-        }
-    }
-    res.redirect('/');
 });
 
 app.listen(PORT, '0.0.0.0', () => {
