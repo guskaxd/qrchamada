@@ -12,6 +12,50 @@ const PORT = process.env.PORT || 3000;
 const DIRETORIO_DADOS = '/data';
 const DOMINIO_PUBLICO = 'https://qrchamada-production.up.railway.app';
 
+const FOOTER_CSS = `
+    .footer-bar {
+        background-color: #1c1e22; /* Cor escura idêntica à imagem */
+        color: #a0aab2; /* Texto cinza claro */
+        text-align: center;
+        padding: 16px 0;
+        font-size: 14px;
+        width: 100%;
+        position: fixed; /* Fixa no fundo da tela */
+        bottom: 0;
+        left: 0;
+        font-family: 'Inter', sans-serif;
+        z-index: 9999;
+    }
+    .footer-bar span {
+        color: #ffffff; /* Nome em branco */
+        font-weight: 700; /* Negrito */
+    }
+    /* Adiciona um espaçamento no fundo da página para o footer não tampar conteúdo */
+    body { padding-bottom: 60px !important; }
+`;
+
+const FOOTER_HTML = `
+    <div class="footer-bar">
+        Desenvolvido por <span>guskaxd</span>
+    </div>
+`;
+
+// Middleware "Mágico": Injeta o footer em TODAS as páginas HTML do sistema automaticamente
+app.use((req, res, next) => {
+    const originalSend = res.send;
+    res.send = function (body) {
+        if (typeof body === 'string' && body.includes('</body>') && body.includes('</style>')) {
+            // Injeta o CSS antes de fechar a tag style
+            let novoBody = body.replace('</style>', `\n${FOOTER_CSS}\n</style>`);
+            // Injeta a barra HTML antes de fechar o body
+            novoBody = novoBody.replace('</body>', `\n${FOOTER_HTML}\n</body>`);
+            return originalSend.call(this, novoBody);
+        }
+        return originalSend.call(this, body);
+    };
+    next();
+});
+
 // ==========================================
 // CONFIGURAÇÕES DO SISTEMA MULTI-PROFESSORES
 // ==========================================
@@ -19,12 +63,6 @@ const MASTER_KEY = process.env.MASTER_KEY || 'ifadmin'; // Código necessário p
 const ARQUIVO_USUARIOS = path.join(DIRETORIO_DADOS, 'usuarios.json');
 
 let estaSalvando = false;
-
-function getDataAtual() {
-    const d = new Date();
-    d.setUTCHours(d.getUTCHours() - 3);
-    return d.toISOString().split('T')[0]; // Retorna YYYY-MM-DD
-}
 
 function getHoraAtual() {
     const d = new Date();
@@ -1090,5 +1128,5 @@ app.post('/registrar', async (req, res) => {
 });
 
 app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 Servidor rodando na porta ${PORT}`);
+    console.log(`Servidor rodando na porta ${PORT}`);
 });
