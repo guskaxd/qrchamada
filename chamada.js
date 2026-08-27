@@ -26,9 +26,15 @@ const FOOTER_CSS = `
         font-family: 'Inter', sans-serif;
         z-index: 9999;
     }
-    .footer-bar span {
+    .footer-bar a {
         color: #ffffff; /* Nome em branco */
         font-weight: 700; /* Negrito */
+        text-decoration: none; /* Tira o sublinhado padrão de link */
+        transition: color 0.2s ease;
+    }
+    .footer-bar a:hover {
+        color: #2ea44f; /* Fica verde quando passa o mouse por cima! */
+        text-decoration: underline;
     }
     /* Adiciona um espaçamento no fundo da página para o footer não tampar conteúdo */
     body { padding-bottom: 60px !important; }
@@ -36,7 +42,7 @@ const FOOTER_CSS = `
 
 const FOOTER_HTML = `
     <div class="footer-bar">
-        Desenvolvido por <span>guskaxd</span>
+        Desenvolvido por <a href="https://www.instagram.com/guskov.png/" target="_blank" rel="noopener noreferrer">guskaxd</a>
     </div>
 `;
 
